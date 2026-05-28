@@ -1,15 +1,27 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.dependencies import get_db
+
 from fastapi import Depends
 
 from app.dependencies import get_current_user
 from app.models.user import User
 
-from storage.chat_store import (
-    create_chat, list_chats, get_chat,
-    append_message, delete_chat, rename_chat, pin_chat,
+from app.services.chat_service import (
+    create_chat,
+    list_chats,
+    get_chat,
 )
+
+from storage.chat_store import (
+    append_message,
+    delete_chat,
+    rename_chat,
+    pin_chat,
+)
+
 from app.services.rag_pipeline import RAGPipeline
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -29,36 +41,63 @@ class PinBody(BaseModel):
 
 
 @router.post("")
-def new_chat(
+async def new_chat(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    return create_chat()
+    return await create_chat(
+        db,
+        str(current_user.id),
+    )
 
 @router.get("")
-def get_all_chats(
+async def get_all_chats(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    return list_chats()
+    return await list_chats(
+        db,
+        str(current_user.id),
+    )
 
 @router.get("/{chat_id}")
-def get_chat_detail(
+async def get_chat_detail(
     chat_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    chat = get_chat(chat_id)
+    chat = await get_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
     return chat
 
-
 @router.post("/{chat_id}/query")
-def query_in_chat(
+async def query_in_chat(
     chat_id: str,
     body: QueryBody,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    if not get_chat(chat_id):
-        raise HTTPException(status_code=404, detail="Chat not found")
+    chat = await get_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
     result = pipeline.answer(body.question)
     append_message(chat_id, body.question, result["answer"], result["sources"])
     return result
