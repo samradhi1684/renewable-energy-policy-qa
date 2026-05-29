@@ -51,3 +51,46 @@ async def get_chat(
     )
 
     return result.scalar_one_or_none()
+
+
+async def delete_chat(
+    db: AsyncSession,
+    chat_id: str,
+    user_id: str,
+):
+    chat = await get_chat(
+        db,
+        chat_id,
+        user_id,
+    )
+
+    if not chat:
+        return False
+
+    await db.delete(chat)
+    await db.commit()
+
+    return True
+
+
+async def rename_chat(
+    db: AsyncSession,
+    chat_id: str,
+    user_id: str,
+    title: str,
+):
+    chat = await get_chat(
+        db,
+        chat_id,
+        user_id,
+    )
+
+    if not chat:
+        return None
+
+    chat.title = title
+
+    await db.commit()
+    await db.refresh(chat)
+
+    return chat
