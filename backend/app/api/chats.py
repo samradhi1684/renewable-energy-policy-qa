@@ -13,13 +13,18 @@ from app.services.chat_service import (
     create_chat,
     list_chats,
     get_chat,
+    delete_chat,
+    rename_chat,
 )
 
 from storage.chat_store import (
     append_message,
-    delete_chat,
-    rename_chat,
     pin_chat,
+)
+
+from app.services.message_service import (
+    create_message,
+    list_messages,
 )
 
 from app.services.rag_pipeline import RAGPipeline
@@ -98,30 +103,91 @@ async def query_in_chat(
             status_code=404,
             detail="Chat not found",
         )
+
     result = pipeline.answer(body.question)
-    append_message(chat_id, body.question, result["answer"], result["sources"])
+
+    await create_message(
+        db,
+        chat_id,
+        "user",
+        body.question,
+    )
+
+    await create_message(
+        db,
+        chat_id,
+        "assistant",
+        result["answer"],
+    )
+
     return result
 
-
-@router.delete("/{chat_id}")
-def remove_chat(
+@router.get("/{chat_id}/messages")
+async def get_messages(
     chat_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    if not delete_chat(chat_id):
-        raise HTTPException(status_code=404, detail="Chat not found")
+    chat = await get_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
+    messages = await list_messages(
+        db,
+        chat_id,
+    )
+
+    return messages
+
+@router.delete("/{chat_id}")
+async def remove_chat(
+    chat_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    success = await delete_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
     return {"ok": True}
 
 
 @router.patch("/{chat_id}/rename")
-def rename(
+async def rename(
     chat_id: str,
     body: RenameBody,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    chat = rename_chat(chat_id, body.title)
+    chat = await rename_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+        body.title,
+    )
+
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
     return chat
 
 
