@@ -35,18 +35,13 @@ export default function Home() {
 
   // Rebuild flat Message[] from a chat's history
   function loadChatMessages(chat: Chat) {
-    const msgs: Message[] = [];
-    for (const m of chat.messages) {
-      msgs.push({ role: "user", content: m.question });
-      msgs.push({ role: "assistant", content: m.answer, sources: m.sources });
-    }
-    setActiveMessages(msgs);
+    setActiveMessages([]);
   }
 
   async function handleNewChat() {
     const chat = await createChat();
     setChats((prev) => [chat, ...prev]);
-    setActiveChatId(chat.chat_id);
+    setActiveChatId(chat.id);
     setActiveMessages([]);
   }
 
@@ -58,7 +53,7 @@ export default function Home() {
 
   async function handleDeleteChat(id: string) {
     await deleteChat(id);
-    setChats((prev) => prev.filter((c) => c.chat_id !== id));
+    setChats((prev) => prev.filter((c) => c.id !== id));
     if (activeChatId === id) {
       setActiveChatId(null);
       setActiveMessages([]);
@@ -68,7 +63,7 @@ export default function Home() {
   async function handleRenameChat(id: string, newTitle: string) {
     const updated = await renameChat(id, newTitle);
     setChats((prev) =>
-      prev.map((c) => (c.chat_id === id ? { ...c, title: updated.title } : c))
+      prev.map((c) => (c.id === id ? { ...c, title: updated.title } : c))
     );
   }
 
@@ -76,7 +71,7 @@ export default function Home() {
     const updated = await pinChat(id, pinned);
     setChats((prev) =>
       prev.map((c) =>
-        c.chat_id === id ? { ...c, pinned: updated.pinned } : c
+        c.id === id ? { ...c, pinned: updated.pinned } : c
       )
     );
   }
@@ -93,8 +88,8 @@ export default function Home() {
     if (!chatId) {
       const chat = await createChat();
       setChats((prev) => [chat, ...prev]);
-      setActiveChatId(chat.chat_id);
-      chatId = chat.chat_id;
+      setActiveChatId(chat.id);
+      chatId = chat.id;
     }
 
     // Optimistically append user message
@@ -120,7 +115,7 @@ export default function Home() {
       const updated = await getChat(chatId);
       setChats((prev) =>
         prev.map((c) =>
-          c.chat_id === chatId ? { ...c, title: updated.title } : c
+          c.id === chatId ? { ...c, title: updated.title } : c
         )
       );
     } catch {
