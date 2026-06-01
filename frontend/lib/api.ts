@@ -233,9 +233,7 @@ export async function renameChat(
   chatId: string,
   title: string
 ): Promise<Chat> {
-
-  const token =
-    localStorage.getItem("token");
+  const token = localStorage.getItem("token");
 
   const res = await fetch(
     `${BASE}/chats/${chatId}/rename`,
@@ -249,8 +247,9 @@ export async function renameChat(
     }
   );
 
-  if (!res.ok)
+  if (!res.ok) {
     throw new Error("Failed to rename chat");
+  }
 
   return res.json();
 }

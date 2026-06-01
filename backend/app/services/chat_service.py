@@ -1,10 +1,10 @@
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from datetime import datetime
 
 from app.models.chat import Chat
-
+from app.models.message import Message
 
 async def create_chat(
     db: AsyncSession,
@@ -67,7 +67,16 @@ async def delete_chat(
     if not chat:
         return False
 
+    # delete all messages first
+    await db.execute(
+        delete(Message).where(
+            Message.chat_id == chat.id
+        )
+    )
+
+    # then delete chat
     await db.delete(chat)
+
     await db.commit()
 
     return True
