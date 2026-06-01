@@ -12,6 +12,7 @@ import {
   createChat,
   listChats,
   getChat,
+  getMessages,
   queryInChat,
   regenerateAnswer,
   deleteChat,
@@ -62,60 +63,39 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  function loadChatMessages(
-    chat: Chat
-  ) {
 
-    const msgs: Message[] = [];
-
-    for (const m of chat.messages) {
-
-      msgs.push({
-        role: "user",
-        content: m.question,
-      });
-
-      msgs.push({
-        role: "assistant",
-        content: m.answer,
-        sources: m.sources,
-      });
-    }
-
-    setActiveMessages(msgs);
-  }
 
   async function handleNewChat() {
-
-    const chat =
-      await createChat();
+    const chat = await createChat();
 
     setChats((prev) => [
       chat,
       ...prev,
     ]);
 
-    setActiveChatId(
-      chat.chat_id
-    );
+    setActiveChatId(chat.id);
 
     setActiveMessages([]);
-    setSourcePaneSources(
-      null
-    );
+    setSourcePaneSources(null);
   }
 
-  async function handleSelectChat(
-    id: string
-  ) {
 
+  async function handleSelectChat(id: string) {
     setActiveChatId(id);
     setSourcePaneSources(null);
 
-    const chat =
-      await getChat(id);
+    const messages = await getMessages(id);
 
-    loadChatMessages(chat);
+    const formatted: Message[] = [];
+
+    for (const m of messages) {
+      formatted.push({
+        role: m.role,
+        content: m.content,
+      });
+    }
+
+    setActiveMessages(formatted);
   }
 
   async function handleDeleteChat(
@@ -127,7 +107,7 @@ export default function Home() {
     setChats((prev) =>
       prev.filter(
         (c) =>
-          c.chat_id !== id
+          c.id !== id
       )
     );
 
@@ -155,11 +135,11 @@ export default function Home() {
 
     setChats((prev) =>
       prev.map((c) =>
-        c.chat_id === id
+
+        c.id === id
           ? {
               ...c,
-              title:
-                updated.title,
+              title: updated.title,
             }
           : c
       )
@@ -177,33 +157,27 @@ export default function Home() {
         pinned
       );
 
-    setChats((prev) =>
-      prev.map((c) =>
-        c.chat_id === id
-          ? {
-              ...c,
-              pinned:
-                updated.pinned,
-            }
-          : c
-      )
-    );
+  setChats((prev) =>
+    prev.map((c) =>
+      c.id === id
+        ? {
+            ...c,
+            pinned: updated.pinned,
+          }
+        : c
+    )
+  );
   }
 
   function handleSourceClick(
     sources: Source[],
     index: number
   ) {
-
     if (
-      sourcePaneSources ===
-        sources &&
-      sourcePaneIndex ===
-        index
+      sourcePaneSources === sources &&
+      sourcePaneIndex === index
     ) {
-      setSourcePaneSources(
-        null
-      );
+      setSourcePaneSources(null);
       return;
     }
 
@@ -272,17 +246,12 @@ export default function Home() {
 
       setActiveMessages(
         (prev) => {
-
-          const next =
-            [...prev];
+          const next = [...prev];
 
           next[index] = {
-            role:
-              "assistant",
-            content:
-              response.answer,
-            sources:
-              response.sources,
+            role: "assistant",
+            content: response.answer,
+            sources: response.sources,
           };
 
           return next;
@@ -332,11 +301,11 @@ export default function Home() {
           );
 
           setActiveChatId(
-            chat.chat_id
+            chat.id
           );
 
           chatId =
-            chat.chat_id;
+            chat.id;
         }
 
         setActiveMessages(

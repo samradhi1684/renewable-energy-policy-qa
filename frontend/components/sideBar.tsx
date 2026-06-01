@@ -4,9 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import type { Chat } from "../lib/api";
 import { PanelLeft, Plus, MoreVertical, Pin, Pencil, Trash2 } from "lucide-react";
 
+import { useAuth } from "@/context/AuthContext";
+
 const MODELS = [
-  { id: "dsire", label: "DSIRE" },
-  { id: "mnre", label: "MNRE" },
+  { id: "dsire", label: "USA" },
+  { id: "mnre", label: "India" },
 ];
 
 type Props = {
@@ -38,6 +40,7 @@ export default function Sidebar({
   selectedModel,
   onModelChange,
 }: Props) {
+  const { user, logout } = useAuth();
   const [menu, setMenu] = useState<MenuState>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -46,7 +49,7 @@ export default function Sidebar({
   const menuRef = useRef<HTMLDivElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
-  const selectedLabel = MODELS.find((m) => m.id === selectedModel)?.label ?? "DSIRE";
+  const selectedLabel = MODELS.find((m) => m.id === selectedModel)?.label ?? "USA";
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -69,7 +72,7 @@ export default function Sidebar({
   }
 
   function startRename(chatId: string) {
-    const chat = chats.find((c) => c.chat_id === chatId);
+    const chat = chats.find((c) => c.id === chatId);
     setRenameValue(chat?.title ?? "");
     setRenamingId(chatId);
     setMenu(null);
@@ -280,16 +283,16 @@ export default function Sidebar({
                     </p>
                     {pinned.map((chat) => (
                       <ChatRow
-                        key={chat.chat_id}
+                        key={chat.id}
                         chat={chat}
-                        isActive={chat.chat_id === activeChatId}
-                        isRenaming={renamingId === chat.chat_id}
+                        isActive={chat.id === activeChatId}
+                        isRenaming={renamingId === chat.id}
                         renameValue={renameValue}
                         renameRef={renameRef}
-                        onSelect={() => onSelectChat(chat.chat_id)}
-                        onOpenMenu={(e) => openMenu(e, chat.chat_id)}
+                        onSelect={() => onSelectChat(chat.id)}
+                        onOpenMenu={(e) => openMenu(e, chat.id)}
                         onRenameChange={setRenameValue}
-                        onRenameCommit={() => commitRename(chat.chat_id)}
+                        onRenameCommit={() => commitRename(chat.id)}
                       />
                     ))}
                   </>
@@ -312,16 +315,16 @@ export default function Sidebar({
                     </p>
                     {unpinned.map((chat) => (
                       <ChatRow
-                        key={chat.chat_id}
+                        key={chat.id}
                         chat={chat}
-                        isActive={chat.chat_id === activeChatId}
-                        isRenaming={renamingId === chat.chat_id}
+                        isActive={chat.id === activeChatId}
+                        isRenaming={renamingId === chat.id}
                         renameValue={renameValue}
                         renameRef={renameRef}
-                        onSelect={() => onSelectChat(chat.chat_id)}
-                        onOpenMenu={(e) => openMenu(e, chat.chat_id)}
+                        onSelect={() => onSelectChat(chat.id)}
+                        onOpenMenu={(e) => openMenu(e, chat.id)}
                         onRenameChange={setRenameValue}
-                        onRenameCommit={() => commitRename(chat.chat_id)}
+                        onRenameCommit={() => commitRename(chat.id)}
                       />
                     ))}
                   </>
@@ -372,25 +375,66 @@ export default function Sidebar({
                   flexShrink: 0,
                 }}
               >
-                S
+                {user?.username?.charAt(0).toUpperCase() ?? "U"}
               </div>
-              <span
+              <div
                 style={{
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  color: "var(--foreground)",
+                  display: "flex",
+                  flexDirection: "column",
                   overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
                 }}
               >
-                Samradhi Sharma
-              </span>
-            </button>
-          </div>
+                <span
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    color: "var(--foreground)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {user?.username ?? "Guest"}
+                </span>
 
-        </div>
-      </aside>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--placeholder-text)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {user?.email}
+                </span>
+              </div>
+</button>
+
+<button
+  onClick={() => {
+    logout();
+    window.location.href = "/login";
+  }}
+  style={{
+    width: "100%",
+    marginTop: "6px",
+    padding: "8px",
+    borderRadius: "8px",
+    border: "1px solid var(--sidebar-border)",
+    background: "transparent",
+    cursor: "pointer",
+    fontSize: "13px",
+    color: "#ef4444",
+  }}
+>
+  Logout
+</button>
+
+</div>
+
+</div>
+</aside>
 
       {/* Expand button shown when sidebar is closed */}
       {!isOpen && (
@@ -438,7 +482,7 @@ export default function Sidebar({
           }}
         >
           {(() => {
-            const chat = chats.find((c) => c.chat_id === menu.chatId);
+            const chat = chats.find((c) => c.id === menu.chatId);
             if (!chat) return null;
             return (
               <>
