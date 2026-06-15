@@ -45,6 +45,16 @@ export default function Home() {
   const [activeMessages, setActiveMessages] =
     useState<Message[]>([]);
 
+  const [webSearch, setWebSearch] =
+  useState(false);
+
+  useEffect(() => {
+  console.log(
+    "webSearch state:",
+    webSearch
+  );
+}, [webSearch]);
+
   const [
     sourcePaneSources,
     setSourcePaneSources
@@ -92,6 +102,7 @@ export default function Home() {
       formatted.push({
         role: m.role,
         content: m.content,
+        created_at: m.created_at,
       });
     }
 
@@ -252,6 +263,8 @@ export default function Home() {
             role: "assistant",
             content: response.answer,
             sources: response.sources,
+            created_at:
+              new Date().toISOString(),
           };
 
           return next;
@@ -266,15 +279,40 @@ export default function Home() {
   const handleSend =
     useCallback(
       async (
-        overrideQuestion?: string
+          overrideQuestion?: any
       ) => {
+        console.log(
+          "overrideQuestion =",
+          overrideQuestion
+        );
+      const currentQuestion =
+        typeof overrideQuestion ===
+        "string"
+          ? overrideQuestion
+          : question;
 
-        const currentQuestion =
-          overrideQuestion ??
-          question;
+        // const currentQuestion = String(
+        //   overrideQuestion ??
+        //   question ??
+        //   ""
+        // );
+
+        // const currentQuestion =
+        //   overrideQuestion ??
+        //   question;
+
+        console.log(
+          "currentQuestion:",
+          currentQuestion
+        );
+
+        console.log(
+          "type:",
+          typeof currentQuestion
+        );
 
         if (
-          !currentQuestion.trim() ||
+          currentQuestion.trim() === "" ||
           loading
         )
           return;
@@ -316,18 +354,57 @@ export default function Home() {
                 "user",
               content:
                 currentQuestion,
+                created_at:
+                  new Date().toISOString(),
             },
           ]
         );
 
         try {
 
+          console.log(
+            "QUESTION SENT:",
+            currentQuestion
+          );
+
+          console.log(
+            "WEB SEARCH:",
+            webSearch
+          );
+
           const response =
             await queryInChat(
               chatId,
-              currentQuestion
+              currentQuestion,
+              webSearch
             );
 
+          const combinedSources: Source[] = [
+            ...(response.sources || []),
+
+            ...((response.web_sources || []).map(
+              (w: any, idx: number) => ({
+                chunk_id: `web-${idx}`,
+                document_id: w.title,
+                chunk_text: w.content,
+
+                token_start: 0,
+                token_end: 0,
+
+                evidence: w.url,
+                score: 1,
+
+                highlight_spans: [],
+
+                is_web: true,
+              } as Source))
+            ),
+          ];
+
+            const updatedChats =
+              await listChats();
+
+            setChats(updatedChats);
           setActiveMessages(
             (prev) => [
               ...prev,
@@ -337,7 +414,9 @@ export default function Home() {
                 content:
                   response.answer,
                 sources:
-                  response.sources,
+                  combinedSources,
+                created_at:
+                  new Date().toISOString(),
               },
             ]
           );
@@ -352,6 +431,8 @@ export default function Home() {
                   "assistant",
                 content:
                   "Sorry, something went wrong.",
+                created_at:
+                    new Date().toISOString(),
               },
             ]
           );
@@ -364,6 +445,7 @@ export default function Home() {
         question,
         loading,
         activeChatId,
+        webSearch,
       ]
     );
 
@@ -484,6 +566,17 @@ export default function Home() {
             loading={
               loading
             }
+            webSearch={
+              webSearch
+            }
+            onWebSearchChange={(value) => {
+              console.log(
+                "checkbox changed:",
+                value
+              );
+
+              setWebSearch(value);
+            }}
           />
         </div>
       </div>

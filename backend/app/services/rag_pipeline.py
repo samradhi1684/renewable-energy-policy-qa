@@ -5,6 +5,8 @@ from rapidfuzz import fuzz
 from app.adapters.llm_client import LLMClient
 from app.adapters.retriever import Retriever
 from app.adapters.embedder import Embedder
+from app.services.web_search import search_web
+
 
 
 class RAGPipeline:
@@ -14,27 +16,208 @@ class RAGPipeline:
         self.llm = LLMClient()
         self.embedder = Embedder()
 
+    def generate_chat_title(
+        self,
+        question: str
+    ) -> str:
+
+        prompt = f"""
+    You generate conversation titles.
+
+    Rules:
+    - 2 to 6 words
+    - No quotation marks
+    - No explanations
+    - Return ONLY the title
+
+    Question:
+    {question}
+    
+    
+
+    Title:
+    """
+
+        raw = self.llm.generate(
+            prompt,
+            temperature=0.1
+        )
+
+        if hasattr(raw, "content"):
+            raw = raw.content
+
+        return str(raw).strip()[:60]
+    def rewrite_query(
+        self,
+        question: str,
+        chat_history=None,
+    ):
+        if not chat_history or len(chat_history) < 2:
+            return question
+            return question
+
+        history_text = "\n".join(
+            [
+                f"{m.role}: {m.content}"
+                for m in chat_history
+            ]
+        )
+
+        prompt = f"""
+    You rewrite follow-up questions.
+
+    Your job:
+
+    Convert the user's latest question
+    into a fully standalone question.
+
+    Use conversation history.
+
+    Example:
+
+
+    Conversation:
+    user: Explain VW mitigation program
+
+    Question:
+    Summarize that
+
+    Output:
+    Summarize the Volkswagen Mitigation Program.
+
+    Rules:
+
+    - Return ONLY rewritten question
+    - No explanation
+    - Keep original meaning
+
+
+    Conversation History:
+
+    {history_text}
+
+    Latest Question:
+
+    {question}
+
+    Rewritten Question:
+    """
+
+        rewritten = self.llm.generate(
+            prompt,
+            temperature=0.1
+        )
+
+        return rewritten.strip()
+    
     def answer(
-    self,
-    question: str,
-    top_k: int = 5,
-    retrieved_override=None,
-    temperature=0.2
-):
+        self,
+        question: str,
+        chat_history=None,
+        top_k: int = 5,
+        retrieved_override=None,
+        temperature=0.2,
+        web_search=False,
+    ):
+
+        web_context = ""
+        web_results = []
+        
+        history_text = ""
+
+        if chat_history:
+
+            history_lines = []
+
+            for msg in chat_history:
+
+                history_lines.append(
+                    f"{msg.role}: {msg.content}"
+                )
+
+            history_text = "\n".join(
+                history_lines
+            )
+
+        if web_search:
+
+            print("RUNNING TAVILY SEARCH")
+            try:
+                search_question = self.rewrite_query(
+                    question,
+                    chat_history
+                )
+
+                print(
+                    "ORIGINAL:",
+                    question
+                )
+
+                print(
+                    "REWRITTEN:",
+                    search_question
+                )
+                web_results = search_web(
+                    search_question
+                )
+               
+                web_sources = [
+                    {
+                        "title": r["title"],
+                        "url": r["url"],
+                        "content": r["content"]
+                    }
+                    for r in web_results[:5]
+                ]
+                print(
+                "WEB RESULTS:",
+                len(web_results)
+            )
+
+                web_context = "\n\n".join(
+                    [
+                        f"Title: {r['title']}\n"
+                        f"Content: {r['content']}"
+                        for r in web_results[:5]
+                    ]
+                )
+
+            except Exception as e:
+
+                print(
+                    "Web search failed:",
+                    e
+                )
+
+                web_context = ""
 
         if retrieved_override is not None:
+
             retrieved = retrieved_override
+
         else:
-            retrieved = self.retriever.retrieve(
+            search_question = self.rewrite_query(
                 question,
+                chat_history
+            )
+
+            print(
+                "REWRITTEN:",
+                search_question
+            )
+
+            retrieved = self.retriever.retrieve(
+                search_question,
                 top_k=top_k
             )
-        # Build numbered evidence
+
         evidence_map = {}
         evidence_lines = []
         sentence_idx = 0
 
-        for item_idx, item in enumerate(retrieved):
+        for item_idx, item in enumerate(
+            retrieved
+        ):
 
             sentences = _split_sentences(
                 item["chunk_text"]
@@ -59,78 +242,123 @@ class RAGPipeline:
             evidence_lines
         )
 
+        web_section = ""
+
+        if web_context:
+
+            web_section = f"""
+
+    Recent Web Information:
+    {web_context}
+    """
+
         prompt = f"""
-You are a Policy QA assistant.
+You are a Renewable Energy Policy assistant.
 
-Use ONLY the provided evidence.
+You are having an ongoing conversation
+with the user.
 
-Answer the question.
+Use previous conversation context
+to understand follow-up questions.
 
-Also provide citation ids.
+Answer using:
+
+1. Policy documents
+2. Recent web information
+
+Rules:
+
+- Understand references like:
+  it, this, that, they, those
+
+- Use conversation history
+  to understand context
+
+- Use policy evidence whenever possible
+
+- Use web information for
+  recent trends, statistics,
+  updates and developments
+
+- Do not invent facts
 
 Return JSON only.
 
-Format:
-
 {{
   "answer":"...",
-  "citations":["S1","S3"]
+  "citations":["S1","S2"]
 }}
 
-Evidence:
+Conversation History:
+
+{history_text}
+
+Policy Evidence:
+
 {numbered_context}
 
-Question:
+{web_section}
+
+Current User Question:
+
 {question}
 """
 
         raw = self.llm.generate(
-        prompt,
-        temperature=temperature
-)
+            prompt,
+            temperature=temperature
+        )
 
-        # unwrap model response
         if hasattr(raw, "content"):
             raw = raw.content
 
         raw = str(raw).strip()
 
-        # ---------- robust JSON parsing ----------
-
         try:
+
             parsed = json.loads(raw)
 
         except Exception:
 
             cleaned = (
-                raw.replace("```json", "")
-                   .replace("```", "")
-                   .strip()
+                raw.replace(
+                    "```json",
+                    ""
+                )
+                .replace(
+                    "```",
+                    ""
+                )
+                .strip()
             )
 
             try:
-                parsed = json.loads(cleaned)
+
+                parsed = json.loads(
+                    cleaned
+                )
 
             except Exception:
+
                 parsed = {
                     "answer": cleaned,
-                    "citations": []
+                    "citations": [],
                 }
 
-        # double-encoded JSON
         if isinstance(parsed, str):
 
             try:
-                parsed = json.loads(parsed)
+
+                parsed = json.loads(
+                    parsed
+                )
 
             except Exception:
+
                 parsed = {
                     "answer": parsed,
-                    "citations": []
+                    "citations": [],
                 }
-
-        print("RAW:", raw)
-        print("PARSED:", parsed)
 
         answer = parsed.get(
             "answer",
@@ -142,8 +370,6 @@ Question:
             []
         )
 
-        # ---------- nested JSON inside answer ----------
-
         if (
             isinstance(answer, str)
             and answer.strip().startswith("{")
@@ -152,11 +378,8 @@ Question:
 
             try:
 
-                nested = json.loads(answer)
-
-                print(
-                    "NESTED PARSED:",
-                    nested
+                nested = json.loads(
+                    answer
                 )
 
                 answer = nested.get(
@@ -172,11 +395,11 @@ Question:
             except Exception:
                 pass
 
-        # ---------- build source highlights ----------
-
         sources = []
 
-        for idx, item in enumerate(retrieved):
+        for idx, item in enumerate(
+            retrieved
+        ):
 
             spans = []
             cited_sentences = []
@@ -193,14 +416,12 @@ Question:
 
                 sent = ev["sentence"]
 
-                # exact match
                 start = item[
                     "chunk_text"
                 ].lower().find(
                     sent.lower()
                 )
 
-                # fuzzy fallback
                 if start == -1:
 
                     best_score = 0
@@ -223,6 +444,7 @@ Question:
                         )
 
                         if score > best_score:
+
                             best_score = score
                             best_start = i
 
@@ -248,10 +470,10 @@ Question:
                         cited_sentences
                     ),
                 "highlight_spans":
-                    spans
+                    spans,
             })
-            
-            sources = sorted(
+
+        sources = sorted(
             sources,
             key=lambda x: x["score"],
             reverse=True
@@ -260,7 +482,10 @@ Question:
         return {
             "question": question,
             "answer": answer,
-            "sources": sources
+            "sources": sources,
+            "web_sources": web_results[:5]
+                if web_search
+                else [],
         }
 
 

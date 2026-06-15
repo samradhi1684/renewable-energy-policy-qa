@@ -8,6 +8,7 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
+  created_at?: string;
 };
 
 type Props = {
@@ -89,6 +90,7 @@ export default function ChatWindow({
                 sources={
                   msg.sources
                 }
+                created_at={msg.created_at}
                 onSourceClick={
                   onSourceClick
                 }

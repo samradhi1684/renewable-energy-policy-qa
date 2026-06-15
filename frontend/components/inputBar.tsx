@@ -11,6 +11,11 @@ type Props = {
   onChange: (value: string) => void;
   onSend: () => void;
   loading?: boolean;
+
+  webSearch: boolean;
+  onWebSearchChange: (
+    value: boolean
+  ) => void;
 };
 
 const BASE =
@@ -21,6 +26,8 @@ export default function InputBar({
   onChange,
   onSend,
   loading,
+  webSearch,
+  onWebSearchChange,
 }: Props) {
 
   const textareaRef =
@@ -196,6 +203,35 @@ export default function InputBar({
       width: "100%",
     }}
   >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 6,
+      }}
+    >
+      <label
+        style={{
+          fontSize: 13,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={webSearch}
+          onChange={(e) =>
+            onWebSearchChange(
+              e.target.checked
+            )
+          }
+        />
+        🌐 Search Web
+      </label>
+    </div>
     <div
       style={{
         display: "flex",
