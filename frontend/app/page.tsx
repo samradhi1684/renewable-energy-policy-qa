@@ -27,6 +27,16 @@ export default function Home() {
   const [question, setQuestion] =
     useState("");
 
+  const [selectedFile, setSelectedFile] =
+    useState<File | null>(null);
+
+    useEffect(() => {
+      console.log(
+        "selectedFile:",
+        selectedFile
+      );
+    }, [selectedFile]);
+
   const [loading, setLoading] =
     useState(false);
 
@@ -270,16 +280,21 @@ export default function Home() {
       ) => {
 
         const currentQuestion =
-          overrideQuestion ??
-          question;
+          typeof overrideQuestion === "string"
+            ? overrideQuestion
+            : question;
 
         if (
+          typeof currentQuestion !== "string" ||
           !currentQuestion.trim() ||
           loading
-        )
+        ) {
           return;
+        }
+          
 
         setQuestion("");
+        setSelectedFile(null);
         setLoading(true);
         setSourcePaneSources(
           null
@@ -325,7 +340,8 @@ export default function Home() {
           const response =
             await queryInChat(
               chatId,
-              currentQuestion
+              currentQuestion,
+              selectedFile || undefined
             );
 
           setActiveMessages(
@@ -341,6 +357,11 @@ export default function Home() {
               },
             ]
           );
+
+          const updatedChats =
+            await listChats();
+
+          setChats(updatedChats);
 
         } catch {
 
@@ -472,19 +493,14 @@ export default function Home() {
           }}
         >
           <InputBar
-            value={
-              question
-            }
-            onChange={
-              setQuestion
-            }
-            onSend={
-              handleSend
-            }
-            loading={
-              loading
-            }
-          />
+              value={question}
+              onChange={setQuestion}
+              onSend={handleSend}
+              loading={loading}
+
+              selectedFile={selectedFile}
+              onFileSelect={setSelectedFile}
+            />
         </div>
       </div>
 

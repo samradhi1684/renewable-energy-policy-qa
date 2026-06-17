@@ -194,22 +194,46 @@ export async function getChat(chatId: string): Promise<Chat> {
 
 export async function queryInChat(
   chatId: string,
-  question: string
+  question: string,
+  file?: File
 ): Promise<{ answer: string; sources: Source[] }> {
-  const token = localStorage.getItem("token");
+  const token =
+    localStorage.getItem("token");
 
-  const res = await fetch(
-    `${BASE}/chats/${chatId}/query`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ question }),
-    }
+  const formData =
+    new FormData();
+
+  formData.append(
+    "question",
+    question
   );
-  if (!res.ok) throw new Error("Failed to query");
+
+  if (file) {
+    formData.append(
+      "file",
+      file
+    );
+  }
+
+  const res =
+    await fetch(
+      `${BASE}/chats/${chatId}/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+        },
+        body: formData,
+      }
+    );
+
+  if (!res.ok) {
+    throw new Error(
+      "Failed to query"
+    );
+  }
+
   return res.json();
 }
 

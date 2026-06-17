@@ -9,8 +9,13 @@ import {
 type Props = {
   value: string;
   onChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (question?: string) => void;
   loading?: boolean;
+
+  selectedFile: File | null;
+  onFileSelect: (
+    file: File | null
+  ) => void;
 };
 
 const BASE =
@@ -21,10 +26,17 @@ export default function InputBar({
   onChange,
   onSend,
   loading,
+  selectedFile,
+  onFileSelect,
 }: Props) {
 
   const textareaRef =
     useRef<HTMLTextAreaElement>(
+      null
+    );
+
+  const fileInputRef =
+    useRef<HTMLInputElement>(
       null
     );
 
@@ -214,6 +226,64 @@ export default function InputBar({
     >
 
 
+
+<input
+  ref={fileInputRef}
+  type="file"
+  accept=".pdf,.md,.txt"
+  style={{ display: "none" }}
+  onChange={(e) => {
+    const file =
+      e.target.files?.[0];
+
+    if (file) {
+      console.log(
+        "Selected file:",
+        file.name
+      );
+
+      onFileSelect(file);
+    }
+  }}
+/>
+
+      <button
+        type="button"
+        onClick={() =>
+          fileInputRef.current?.click()
+        }
+        title="Attach document"
+        style={{
+          width: "34px",
+          height: "34px",
+          borderRadius: "50%",
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#777",
+          flexShrink: 0,
+        }}
+      >
+        📎
+      </button>
+
+      {selectedFile && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "#666",
+            marginLeft: 8,
+          }}
+        >
+          📄 {selectedFile.name}
+        </div>
+      )}
+
+
+
       {/* TEXTAREA CENTER */}
       <textarea
         ref={
@@ -228,7 +298,7 @@ export default function InputBar({
         onKeyDown={
           handleKeyDown
         }
-        placeholder="Message the QA System"
+        placeholder="Ask queries related to renewable energy policies..."
         rows={1}
         style={{
           flex: 1,
@@ -301,7 +371,7 @@ export default function InputBar({
 
       {/*SEND RIGHT */}
       <button
-        onClick={onSend}
+        onClick={() => onSend()}
         disabled={!canSend}
         title="Send"
         style={{
