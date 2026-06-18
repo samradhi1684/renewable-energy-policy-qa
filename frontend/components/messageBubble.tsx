@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { Source } from "../lib/api";
 
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 type Props = {
   role: "user" | "assistant";
   content: string;
@@ -130,20 +133,124 @@ export default function MessageBubble({
         gap: 8,
       }}
     >
+
       {/* Answer */}
       <div
         style={{
-          color:
-            "var(--assistant-text)",
-          fontSize:
-            14,
-          lineHeight:
-            1.75,
-          whiteSpace:
-            "pre-wrap",
+          color: "var(--assistant-text)",
+          fontSize: 14,
+          lineHeight: 1.75,
         }}
       >
-        {content}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            table: ({ children }) => (
+              <div
+                style={{
+                  overflowX: "auto",
+                  margin: "16px 0",
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    border: "1px solid var(--input-border)",
+                    fontSize: "14px",
+                  }}
+                >
+                  {children}
+                </table>
+              </div>
+            ),
+
+            thead: ({ children }) => (
+              <thead
+                style={{
+                  background: "transparent",
+                }}
+              >
+                {children}
+              </thead>
+            ),
+
+            th: ({ children }) => (
+              <th
+                style={{
+                  padding: "12px",
+                  border: "1px solid var(--input-border)",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  background: "transparent",
+                  color: "var(--foreground)",
+                }}
+              >
+                {children}
+              </th>
+            ),
+
+            td: ({ children }) => (
+              <td
+                style={{
+                  padding: "12px",
+                  border: "1px solid var(--input-border)",
+                  verticalAlign: "top",
+                  color: "var(--foreground)",
+                  lineHeight: 1.7,
+                }}
+              >
+                {children}
+              </td>
+            ),
+
+            p: ({ children }) => (
+              <p
+                style={{
+                  marginBottom: 12,
+                }}
+              >
+                {children}
+              </p>
+            ),
+
+            ul: ({ children }) => (
+              <ul
+                style={{
+                  paddingLeft: 24,
+                  marginBottom: 12,
+                }}
+              >
+                {children}
+              </ul>
+            ),
+
+            ol: ({ children }) => (
+              <ol
+                style={{
+                  paddingLeft: 24,
+                  marginBottom: 12,
+                }}
+              >
+                {children}
+              </ol>
+            ),
+
+            code: ({ children }) => (
+              <code
+                style={{
+                  background: "#f3f4f6",
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                }}
+              >
+                {children}
+              </code>
+            ),
+          }}
+        >
+          {content}
+        </ReactMarkdown>
       </div>
 
       {/* ChatGPT-style actions */}

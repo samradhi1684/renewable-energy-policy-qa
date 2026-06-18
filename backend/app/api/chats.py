@@ -84,6 +84,9 @@ from fastapi import (
 from pydantic import BaseModel
 from faster_whisper import WhisperModel
 
+from app.services.format_service import (
+    detect_format,
+)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
@@ -257,15 +260,46 @@ async def query_in_chat(
             for r in retrieved
         )
 
+        output_format = detect_format(
+            question
+        )
+
         prompt = f"""
-Answer using ONLY the context.
+        Answer using ONLY the context.
 
-CONTEXT:
-{context}
+        OUTPUT FORMAT:
+        {output_format.value}
 
-QUESTION:
-{question}
-"""
+        Rules:
+
+        paragraph:
+        normal answer
+
+        bullets:
+        return bullet points
+
+        table:
+        return markdown table
+
+        json:
+        return valid json only
+
+        markdown:
+        return markdown document
+
+        report:
+        return a structured report with:
+        - Executive Summary
+        - Findings
+        - Analysis
+        - Conclusion
+
+        CONTEXT:
+        {context}
+
+        QUESTION:
+        {question}
+        """
 
         answer = llm.generate(
             prompt,
