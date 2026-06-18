@@ -1,77 +1,3 @@
-# from fastapi import APIRouter, HTTPException
-# from pydantic import BaseModel
-
-# from storage.chat_store import (
-#     create_chat, list_chats, get_chat,
-#     append_message, delete_chat, rename_chat, pin_chat,
-# )
-# from app.services.rag_pipeline import RAGPipeline
-
-# router = APIRouter(prefix="/chats", tags=["chats"])
-# pipeline = RAGPipeline()
-
-
-# class QueryBody(BaseModel):
-#     question: str
-
-
-# class RenameBody(BaseModel):
-#     title: str
-
-
-# class PinBody(BaseModel):
-#     pinned: bool
-
-
-# @router.post("")
-# def new_chat():
-#     return create_chat()
-
-
-# @router.get("")
-# def get_all_chats():
-#     return list_chats()
-
-
-# @router.get("/{chat_id}")
-# def get_chat_detail(chat_id: str):
-#     chat = get_chat(chat_id)
-#     if not chat:
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     return chat
-
-
-# @router.post("/{chat_id}/query")
-# def query_in_chat(chat_id: str, body: QueryBody):
-#     if not get_chat(chat_id):
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     result = pipeline.answer(body.question)
-#     append_message(chat_id, body.question, result["answer"], result["sources"])
-#     return result
-
-
-# @router.delete("/{chat_id}")
-# def remove_chat(chat_id: str):
-#     if not delete_chat(chat_id):
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     return {"ok": True}
-
-
-# @router.patch("/{chat_id}/rename")
-# def rename(chat_id: str, body: RenameBody):
-#     chat = rename_chat(chat_id, body.title)
-#     if not chat:
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     return chat
-
-
-# @router.patch("/{chat_id}/pin")
-# def pin(chat_id: str, body: PinBody):
-#     chat = pin_chat(chat_id, body.pinned)
-#     if not chat:
-#         raise HTTPException(status_code=404, detail="Chat not found")
-#     return chat
-
 import os
 import tempfile
 
@@ -103,6 +29,7 @@ from app.services.chat_service import (
     get_chat,
     delete_chat,
     rename_chat,
+    search_chats,
 )
 
 from fastapi import Form
@@ -128,9 +55,17 @@ from storage.chat_store import (
 from app.services.message_service import (
     create_message,
     list_messages,
+    get_recent_messages,
 )
 
 from app.services.rag_pipeline import RAGPipeline
+from fastapi.responses import (
+    PlainTextResponse,
+    Response,
+)
+
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 
 router = APIRouter(
@@ -150,6 +85,7 @@ whisper_model = WhisperModel(
 
 class QueryBody(BaseModel):
     question: str
+    web_search: bool = False
 
 class RegenerateBody(BaseModel):
     question: str
@@ -183,6 +119,18 @@ async def get_all_chats(
         str(current_user.id),
     )
 
+@router.get("/search")
+async def search_chat_titles(
+    q: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await search_chats(
+        db,
+        str(current_user.id),
+        q,
+    )
+
 @router.get("/{chat_id}")
 async def get_chat_detail(
     chat_id: str,
@@ -209,6 +157,7 @@ async def query_in_chat(
     chat_id: str,
     question: str = Form(...),
     file: UploadFile | None = File(None),
+    web_search: bool = Form(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -223,6 +172,14 @@ async def query_in_chat(
             status_code=404,
             detail="Chat not found",
         )
+    print(
+        "WEB SEARCH RECEIVED:",
+        web_search
+    )
+    history = await get_recent_messages(
+    db,
+    chat_id,
+    )
 
     #
     # DOCUMENT MODE
@@ -317,7 +274,9 @@ async def query_in_chat(
     else:
 
         result = pipeline.answer(
-            question
+            question,
+            chat_history=history,
+            web_search=web_search,
         )
 
     await create_message(
@@ -326,6 +285,28 @@ async def query_in_chat(
         "user",
         question,
     )
+
+    if chat.title == "New Chat":
+
+        try:
+
+            title = pipeline.generate_chat_title(
+                question
+            )
+
+            await rename_chat(
+                db,
+                chat_id,
+                str(current_user.id),
+                title,
+            )
+
+        except Exception as e:
+
+            print(
+                "Title generation failed:",
+                e
+            )
 
     await create_message(
         db,
@@ -485,6 +466,163 @@ def pin(
         )
 
     return chat
+
+@router.get("/{chat_id}/export")
+async def export_chat(
+    chat_id: str,
+    format: str = "txt",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    chat = await get_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
+    messages = await list_messages(
+        db,
+        chat_id,
+    )
+
+    title = chat.title or "chat"
+
+    # TXT
+    if format == "txt":
+
+        content = f"Chat: {title}\n\n"
+
+        for msg in messages:
+
+            content += (
+                f"[{msg.role.upper()}]\n"
+                f"{msg.content}\n\n"
+            )
+
+        return PlainTextResponse(
+            content=content,
+            headers={
+                "Content-Disposition":
+                f'attachment; filename="{title}.txt"'
+            },
+        )
+
+    # MARKDOWN
+    if format == "md":
+
+        content = f"# {title}\n\n"
+
+        for msg in messages:
+
+            role = (
+                "User"
+                if msg.role == "user"
+                else "Assistant"
+            )
+
+            content += (
+                f"## {role}\n\n"
+                f"{msg.content}\n\n"
+            )
+
+        return Response(
+            content=content,
+            media_type="text/markdown",
+            headers={
+                "Content-Disposition":
+                f'attachment; filename="{title}.md"'
+            },
+        )
+
+    # PDF
+    if format == "pdf":
+
+        buffer = BytesIO()
+
+        pdf = canvas.Canvas(buffer)
+
+        y = 800
+
+        pdf.setFont(
+            "Helvetica-Bold",
+            16,
+        )
+
+        pdf.drawString(
+            40,
+            y,
+            title,
+        )
+
+        y -= 40
+
+        pdf.setFont(
+            "Helvetica",
+            11,
+        )
+
+        for msg in messages:
+
+            role = (
+                "USER"
+                if msg.role == "user"
+                else "ASSISTANT"
+            )
+
+            pdf.drawString(
+                40,
+                y,
+                f"{role}:"
+            )
+
+            y -= 20
+
+            text = pdf.beginText(
+                60,
+                y,
+            )
+
+            for line in msg.content.split("\n"):
+                text.textLine(line)
+
+            pdf.drawText(text)
+
+            y -= (
+                len(
+                    msg.content.split("\n")
+                )
+                * 15
+            ) + 30
+
+            if y < 80:
+
+                pdf.showPage()
+
+                y = 800
+
+        pdf.save()
+
+        buffer.seek(0)
+
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition":
+                f'attachment; filename="{title}.pdf"'
+            },
+        )
+
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid format",
+    )
 
 @router.post("/{chat_id}/regenerate")
 async def regenerate_answer(

@@ -2,9 +2,11 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from datetime import datetime
+from sqlalchemy import select, func, or_
 
 from app.models.chat import Chat
 from app.models.message import Message
+
 
 async def create_chat(
     db: AsyncSession,
@@ -103,3 +105,39 @@ async def rename_chat(
     await db.refresh(chat)
 
     return chat
+
+from sqlalchemy import (
+    select,
+    func,
+    or_
+)
+
+async def search_chats(
+    db: AsyncSession,
+    user_id: str,
+    query: str,
+):
+    result = await db.execute(
+        select(Chat)
+        .join(Message)
+        .where(
+            Chat.user_id == user_id,
+            or_(
+                func.lower(Chat.title)
+                .contains(
+                    query.lower()
+                ),
+                func.lower(
+                    Message.content
+                ).contains(
+                    query.lower()
+                ),
+            ),
+        )
+        .distinct()
+        .order_by(
+            Chat.created_at.desc()
+        )
+    )
+
+    return result.scalars().all()

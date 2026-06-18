@@ -125,7 +125,43 @@ export default function SourcePane({
             </div>
             <ScoreBadge score={active.score} />
           </div>
+          {(active as any).is_web && (
+          <div
+            style={{
+              display: "inline-block",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              background: "#e0f2fe",
+              fontSize: "12px",
+              fontWeight: 600,
+              marginBottom: "10px",
+            }}
+          >
+            🌐 Web Source
+          </div>
+        )}
 
+        {(active as any).is_web &&
+          active.evidence && (
+            <div
+              style={{
+                marginBottom: "12px",
+              }}
+            >
+              <a
+                href={active.evidence}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  fontSize: "13px",
+                  color: "#2563eb",
+                  textDecoration: "none",
+                }}
+              >
+                Open Website →
+              </a>
+            </div>
+        )}
           {/* Full chunk — evidence sentences highlighted */}
           <div
             style={{

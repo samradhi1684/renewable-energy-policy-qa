@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { Chat } from "../lib/api";
-import { PanelLeft, Plus, MoreVertical, Pin, Pencil, Trash2 } from "lucide-react";
+import { searchChats,exportChat, type Chat } from "../lib/api";
+import { PanelLeft, Plus, MoreVertical, Pin, Pencil, Trash2 , Search, Download} from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 
@@ -46,6 +46,9 @@ export default function Sidebar({
   const [renameValue, setRenameValue] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] =
+  useState<Chat[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
@@ -65,6 +68,33 @@ export default function Sidebar({
     if (renamingId) renameRef.current?.focus();
   }, [renamingId]);
 
+  useEffect(() => {
+  const runSearch = async () => {
+    if (!searchTerm.trim()) {
+      setSearchResults(chats);
+      return;
+    }
+
+    try {
+      const results =
+        await searchChats(searchTerm);
+
+      setSearchResults(results);
+    } catch (err) {
+      console.error(
+        "Search failed",
+        err
+      );
+    }
+  };
+
+  const timer =
+    setTimeout(runSearch, 300);
+
+  return () =>
+    clearTimeout(timer);
+
+}, [searchTerm, chats]);
   function openMenu(e: React.MouseEvent, chatId: string) {
     e.stopPropagation();
     e.preventDefault();
@@ -82,9 +112,62 @@ export default function Sidebar({
     if (renameValue.trim()) onRenameChat(chatId, renameValue.trim());
     setRenamingId(null);
   }
+  async function handleExport(
+  chatId: string,
+  format:
+    | "txt"
+    | "md"
+    | "pdf"
+) {
+  try {
+    const blob =
+      await exportChat(
+        chatId,
+        format
+      );
 
-  const pinned = chats.filter((c) => c.pinned);
-  const unpinned = chats.filter((c) => !c.pinned);
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+    const a =
+      document.createElement(
+        "a"
+      );
+
+    a.href = url;
+
+    a.download = `chat.${format}`;
+
+    document.body.appendChild(
+      a
+    );
+
+    a.click();
+
+    a.remove();
+
+    URL.revokeObjectURL(
+      url
+    );
+
+    setMenu(null);
+  } catch (err) {
+    console.error(err);
+  }
+}
+  const filteredChats = searchTerm.trim() ? searchResults : chats;
+
+  const pinned =
+    filteredChats.filter(
+      (c) => c.pinned
+    );
+
+  const unpinned =
+    filteredChats.filter(
+      (c) => !c.pinned
+    );
 
   return (
     <>
@@ -251,10 +334,44 @@ export default function Sidebar({
             <Plus size={16} />
             <span>New chat</span>
           </button>
+        <div
+          style={{
+            position: "relative",
+            marginBottom: "10px",
+          }}
+        >
+          <Search
+            size={14}
+            style={{
+              position: "absolute",
+              left: "10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              opacity: 0.5,
+            }}
+          />
 
+          <input
+            type="text"
+            placeholder="Search chats"
+            value={searchTerm}
+            onChange={(e) =>
+              setSearchTerm(e.target.value)
+            }
+            style={{
+              width: "100%",
+              padding: "8px 12px 8px 32px",
+              borderRadius: "8px",
+              border: "1px solid var(--sidebar-border)",
+              background: "transparent",
+              fontSize: "13px",
+              outline: "none",
+            }}
+          />
+        </div>
           {/* Chat list */}
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {chats.length === 0 ? (
+            {filteredChats.length === 0 ? (
               <p
                 style={{
                   fontSize: "13px",
@@ -262,7 +379,9 @@ export default function Sidebar({
                   padding: "4px 10px",
                 }}
               >
-                No chats yet
+                {searchTerm
+                ? "No matching chats"
+                : "No chats yet"}
               </p>
             ) : (
               <>
@@ -514,6 +633,38 @@ export default function Sidebar({
                   }}
                   danger
                 />
+                <ContextMenuItem
+                  icon={<Download size={15} />}
+                  label="Export TXT"
+                  onClick={() =>
+                    handleExport(
+                      menu.chatId,
+                      "txt"
+                    )
+                  }
+                />
+
+                <ContextMenuItem
+                  icon={<Download size={15} />}
+                  label="Export Markdown"
+                  onClick={() =>
+                    handleExport(
+                      menu.chatId,
+                      "md"
+                    )
+                  }
+                />
+
+                <ContextMenuItem
+                  icon={<Download size={15} />}
+                  label="Export PDF"
+                  onClick={() =>
+                    handleExport(
+                      menu.chatId,
+                      "pdf"
+                    )
+                  }
+                />
               </>
             );
           })()}
@@ -699,3 +850,5 @@ function ContextMenuItem({
     </button>
   );
 }
+
+

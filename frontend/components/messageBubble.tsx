@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 type Props = {
   role: "user" | "assistant";
   content: string;
+  created_at?: string;
   sources?: Source[];
   onSourceClick?: (
     sources: Source[],
@@ -17,9 +18,11 @@ type Props = {
   onRegenerate?: () => void;
 };
 
+
 export default function MessageBubble({
   role,
   content,
+  created_at,
   sources,
   onSourceClick,
   onRegenerate,
@@ -87,37 +90,50 @@ export default function MessageBubble({
     );
   }
 
-  if (
-    role === "user"
-  ) {
+  if (role === "user") {
     return (
       <div
         style={{
-          display:
-            "flex",
-          justifyContent:
-            "flex-end",
+          display: "flex",
+          justifyContent: "flex-end",
         }}
       >
         <div
           style={{
-            maxWidth:
-              "80%",
-            background:
-              "var(--user-bubble-bg)",
-            color:
-              "var(--user-bubble-text)",
-            borderRadius:
-              "18px 18px 4px 18px",
-            padding:
-              "10px 16px",
-            fontSize:
-              14,
-            lineHeight:
-              1.6,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
           }}
         >
-          {content}
+          <div
+            style={{
+              maxWidth: "80%",
+              background: "var(--user-bubble-bg)",
+              color: "var(--user-bubble-text)",
+              borderRadius: "18px 18px 4px 18px",
+              padding: "10px 16px",
+              fontSize: 14,
+              lineHeight: 1.6,
+            }}
+          >
+            {content}
+          </div>
+
+          {created_at && (
+            <div
+              style={{
+                fontSize: "11px",
+                color: "var(--placeholder-text)",
+                marginTop: "4px",
+                marginRight: "6px",
+              }}
+            >
+              {new Date(created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -135,6 +151,7 @@ export default function MessageBubble({
     >
 
       {/* Answer */}
+    <div>
       <div
         style={{
           color: "var(--assistant-text)",
@@ -252,6 +269,26 @@ export default function MessageBubble({
           {content}
         </ReactMarkdown>
       </div>
+
+      {created_at && (
+        <div
+          style={{
+            fontSize: "11px",
+            color:
+              "var(--placeholder-text)",
+            marginTop: "4px",
+          }}
+        >
+          {new Date(
+            created_at
+          ).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </div>
+      )}
+    </div>
+
 
       {/* ChatGPT-style actions */}
       <div

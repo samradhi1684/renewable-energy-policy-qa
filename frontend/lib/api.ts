@@ -1,96 +1,4 @@
-// const BASE = "http://127.0.0.1:8000";
 
-// export type Source = {
-//   chunk_id: string;
-//   document_id: string;
-//   score: number;
-//   chunk_text: string;
-// };
-
-// export type Message = {
-//   role: "user" | "assistant";
-//   content: string;
-// };
-
-// export type ChatMessage = {
-//   question: string;
-//   answer: string;
-//   sources: Source[];
-// };
-
-// export type Chat = {
-//   chat_id: string;
-//   title: string;
-//   created_at: string;
-//   pinned: boolean;
-//   messages: ChatMessage[];
-// };
-
-// export async function askQuestion(question: string) {
-//   const res = await fetch(`${BASE}/query`, {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ question }),
-//   });
-//   if (!res.ok) throw new Error("Failed to fetch answer");
-//   return res.json();
-// }
-
-// export async function createChat(): Promise<Chat> {
-//   const res = await fetch(`${BASE}/chats`, { method: "POST" });
-//   if (!res.ok) throw new Error("Failed to create chat");
-//   return res.json();
-// }
-
-// export async function listChats(): Promise<Chat[]> {
-//   const res = await fetch(`${BASE}/chats`);
-//   if (!res.ok) throw new Error("Failed to list chats");
-//   return res.json();
-// }
-
-// export async function getChat(chatId: string): Promise<Chat> {
-//   const res = await fetch(`${BASE}/chats/${chatId}`);
-//   if (!res.ok) throw new Error("Failed to get chat");
-//   return res.json();
-// }
-
-// export async function queryInChat(
-//   chatId: string,
-//   question: string
-// ): Promise<{ answer: string; sources: Source[] }> {
-//   const res = await fetch(`${BASE}/chats/${chatId}/query`, {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ question }),
-//   });
-//   if (!res.ok) throw new Error("Failed to query");
-//   return res.json();
-// }
-
-// export async function deleteChat(chatId: string): Promise<void> {
-//   const res = await fetch(`${BASE}/chats/${chatId}`, { method: "DELETE" });
-//   if (!res.ok) throw new Error("Failed to delete chat");
-// }
-
-// export async function renameChat(chatId: string, title: string): Promise<Chat> {
-//   const res = await fetch(`${BASE}/chats/${chatId}/rename`, {
-//     method: "PATCH",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ title }),
-//   });
-//   if (!res.ok) throw new Error("Failed to rename chat");
-//   return res.json();
-// }
-
-// export async function pinChat(chatId: string, pinned: boolean): Promise<Chat> {
-//   const res = await fetch(`${BASE}/chats/${chatId}/pin`, {
-//     method: "PATCH",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ pinned }),
-//   });
-//   if (!res.ok) throw new Error("Failed to pin chat");
-//   return res.json();
-// }
 const BASE = "http://127.0.0.1:8000";
 
 export type Source = {
@@ -116,6 +24,7 @@ export type Source = {
 export type Message = {
   role: "user" | "assistant";
   content: string;
+  created_at?: string;
 };
 
 export type ChatMessage = {
@@ -191,42 +100,82 @@ export async function getChat(chatId: string): Promise<Chat> {
 
   return res.json();
 }
-
+export interface WebSource {
+  url: string;
+  title: string;
+  content: string;
+  score?: number;
+}
 export async function queryInChat(
   chatId: string,
   question: string,
-  file?: File
-): Promise<{ answer: string; sources: Source[] }> {
+  file?: File,
+  webSearch: boolean = false
+): Promise<{
+  answer: string;
+  sources: Source[];
+  web_sources?: WebSource[];
+}> {
   const token =
     localStorage.getItem("token");
 
-  const formData =
-    new FormData();
-
-  formData.append(
-    "question",
-    question
-  );
-
+  // Document mode with file upload
   if (file) {
+    const formData =
+      new FormData();
+
+    formData.append(
+      "question",
+      question
+    );
+
     formData.append(
       "file",
       file
     );
+
+    formData.append(
+      "web_search",
+      String(webSearch)
+    );
+
+    const res =
+      await fetch(
+        `${BASE}/chats/${chatId}/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+    if (!res.ok) {
+      throw new Error(
+        "Failed to query"
+      );
+    }
+
+    return res.json();
   }
 
-  const res =
-    await fetch(
-      `${BASE}/chats/${chatId}/query`,
-      {
-        method: "POST",
-        headers: {
-          Authorization:
-            `Bearer ${token}`,
-        },
-        body: formData,
-      }
-    );
+  // RAG mode with optional web search
+  const res = await fetch(
+    `${BASE}/chats/${chatId}/query`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question,
+        web_search: webSearch,
+      }),
+    }
+  );
 
   if (!res.ok) {
     throw new Error(
@@ -301,6 +250,57 @@ export async function pinChat(
   return res.json();
 }
 
+export async function searchChats(
+  query: string
+): Promise<Chat[]> {
+
+  const token =
+    localStorage.getItem("token");
+
+  const res = await fetch(
+    `${BASE}/chats/search?q=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok)
+    throw new Error("Failed to search chats");
+
+  return res.json();
+}
+
+export async function exportChat(
+  chatId: string,
+  format: "txt" | "md" | "pdf"
+) {
+  const token =
+    localStorage.getItem(
+      "token"
+    );
+
+  const response =
+    await fetch(
+      `${BASE}/chats/${chatId}/export?format=${format}`,
+      {
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+        },
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "Export failed"
+    );
+  }
+
+  return response.blob();
+}
+
 export async function regenerateAnswer(
   chatId: string,
   question: string,
@@ -308,6 +308,7 @@ export async function regenerateAnswer(
 ): Promise<{
   answer: string;
   sources: Source[];
+  web_sources?: WebSource[];
 }> {
 
   const token =

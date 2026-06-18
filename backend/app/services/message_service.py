@@ -40,3 +40,28 @@ async def list_messages(
     )
 
     return result.scalars().all()
+
+async def get_recent_messages(
+    db: AsyncSession,
+    chat_id: str,
+    limit: int = 6,
+):
+    result = await db.execute(
+        select(Message)
+        .where(
+            Message.chat_id == chat_id
+        )
+        .order_by(
+            Message.created_at.desc()
+        )
+        .limit(limit)
+    )
+
+    messages = (
+        result.scalars().all()
+    )
+
+    # reverse so oldest first
+    return list(
+        reversed(messages)
+    )

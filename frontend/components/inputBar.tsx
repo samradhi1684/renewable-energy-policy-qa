@@ -11,10 +11,13 @@ type Props = {
   onChange: (value: string) => void;
   onSend: (question?: string) => void;
   loading?: boolean;
-
   selectedFile: File | null;
   onFileSelect: (
     file: File | null
+  ) => void;
+  webSearch: boolean;
+  onWebSearchChange: (
+    value: boolean
   ) => void;
 };
 
@@ -28,6 +31,8 @@ export default function InputBar({
   loading,
   selectedFile,
   onFileSelect,
+  webSearch,
+  onWebSearchChange,
 }: Props) {
 
   const textareaRef =
@@ -208,6 +213,35 @@ export default function InputBar({
       width: "100%",
     }}
   >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 6,
+      }}
+    >
+      <label
+        style={{
+          fontSize: 13,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={webSearch}
+          onChange={(e) =>
+            onWebSearchChange(
+              e.target.checked
+            )
+          }
+        />
+        🌐 Search Web
+      </label>
+    </div>
     <div
       style={{
         display: "flex",

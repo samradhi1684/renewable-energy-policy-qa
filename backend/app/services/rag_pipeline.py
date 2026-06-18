@@ -4,7 +4,11 @@ from rapidfuzz import fuzz
 
 from app.adapters.llm_client import LLMClient
 from app.adapters.retriever import Retriever
-from app.adapters.embedder import Embedder
+from app.services.web_search import search_web
+from app.services.prompt_builder import PromptBuilder
+from app.services.memory_manager import MemoryManager
+from app.services.planner import Planner
+
 
 
 class RAGPipeline:
@@ -12,29 +16,171 @@ class RAGPipeline:
     def __init__(self):
         self.retriever = Retriever()
         self.llm = LLMClient()
-        self.embedder = Embedder()
+ 
+        self.prompt_builder = PromptBuilder()
+        self.memory = MemoryManager()
+        self.planner = Planner(self.llm)
+    
+
+    def generate_chat_title(
+        self,
+        question: str
+    ) -> str:
+
+        prompt = f"""
+    You generate conversation titles.
+
+    Rules:
+    - 2 to 6 words
+    - No quotation marks
+    - No explanations
+    - Return ONLY the title
+
+    Question:
+    {question}
+    
+    
+
+    Title:
+    """
+
+        raw = self.llm.generate(
+            prompt,
+            temperature=0.1
+        )
+
+        if hasattr(raw, "content"):
+            raw = raw.content
+
+        return str(raw).strip()[:60]
+
 
     def answer(
-    self,
-    question: str,
-    top_k: int = 5,
-    retrieved_override=None,
-    temperature=0.2
-):
+        self,
+        question: str,
+        chat_history=None,
+        top_k: int = 5,
+        retrieved_override=None,
+        temperature=0.2,
+        web_search=False,
+    ):
+
+        web_context = ""
+        web_results = []
+        web_sources = []
+        
+        memory_context = self.memory.build_context(
+        chat_history 
+        )   
+        decision = self.planner.plan(
+            question,
+            memory_context
+        )
+
+        print("\n--- PLANNER ---")
+        print(json.dumps(
+            decision,
+            indent=2
+        ))
+        print("--------------------")
+        print(
+            "PLANNER DECISION:",
+            decision
+        )
+        search_question = decision.get(
+            "standalone_query"
+        )
+
+        if not isinstance(
+            search_question,
+            str
+        ):
+            print(
+                "Invalid standalone_query from orchestrator"
+            )
+
+            search_question = question
+        if (
+            web_search
+            or decision["needs_web_search"]
+        ):
+
+            print("RUNNING TAVILY SEARCH")
+            try:
+    
+    
+             
+                print(
+                    "ORIGINAL:",
+                    question
+                )
+
+                print(
+                    "REWRITTEN:",
+                    search_question
+                )
+                web_results = search_web(
+                    search_question
+                )
+               
+                web_sources = [
+    {
+        "title": r["title"],
+        "url": r["url"],
+        "content": r["content"]
+    }
+    for r in web_results[:5]
+]
+                
+                print(
+                "WEB RESULTS:",
+                len(web_results)
+            )
+
+                web_context = "\n\n".join(
+                    [
+                        f"Title: {r['title']}\n"
+                        f"Content: {r['content']}"
+                        for r in web_results[:5]
+                    ]
+                )
+
+            except Exception as e:
+
+                print(
+                    "Web search failed:",
+                    e
+                )
+
+                web_context = ""
 
         if retrieved_override is not None:
+
             retrieved = retrieved_override
+
         else:
-            retrieved = self.retriever.retrieve(
-                question,
-                top_k=top_k
+      
+       
+            print(
+                "REWRITTEN:",
+                search_question
             )
-        # Build numbered evidence
+            retrieved = []
+
+            if decision["needs_retrieval"]:
+
+                retrieved = self.retriever.retrieve(
+                    search_question,
+                    top_k=top_k
+                )
+
         evidence_map = {}
         evidence_lines = []
         sentence_idx = 0
 
-        for item_idx, item in enumerate(retrieved):
+        for item_idx, item in enumerate(
+            retrieved
+        ):
 
             sentences = _split_sentences(
                 item["chunk_text"]
@@ -58,79 +204,78 @@ class RAGPipeline:
         numbered_context = "\n".join(
             evidence_lines
         )
+        prompt = self.prompt_builder.build(
+            intent=decision["intent"],
 
-        prompt = f"""
-You are a Policy QA assistant.
+            question=search_question,
 
-Use ONLY the provided evidence.
+            history=memory_context,
 
-Answer the question.
+            policy_context=numbered_context,
 
-Also provide citation ids.
+            web_context=web_context,
 
-Return JSON only.
-
-Format:
-
-{{
-  "answer":"...",
-  "citations":["S1","S3"]
-}}
-
-Evidence:
-{numbered_context}
-
-Question:
-{question}
-"""
-
+            response_mode=decision[
+                "response_mode"
+            ]
+        )
+        
+ 
         raw = self.llm.generate(
-        prompt,
-        temperature=temperature
-)
+            prompt,
+            temperature=temperature
+        )
 
-        # unwrap model response
         if hasattr(raw, "content"):
             raw = raw.content
 
         raw = str(raw).strip()
 
-        # ---------- robust JSON parsing ----------
-
         try:
+
             parsed = json.loads(raw)
 
         except Exception:
 
             cleaned = (
-                raw.replace("```json", "")
-                   .replace("```", "")
-                   .strip()
+                raw.replace(
+                    "```json",
+                    ""
+                )
+                .replace(
+                    "```",
+                    ""
+                )
+                .strip()
             )
 
             try:
-                parsed = json.loads(cleaned)
+
+                parsed = json.loads(
+                    cleaned
+                )
 
             except Exception:
+
                 parsed = {
                     "answer": cleaned,
-                    "citations": []
+                    "citations": [],
                 }
 
-        # double-encoded JSON
         if isinstance(parsed, str):
 
             try:
-                parsed = json.loads(parsed)
+
+                parsed = json.loads(
+                    parsed
+                )
 
             except Exception:
+
                 parsed = {
                     "answer": parsed,
-                    "citations": []
+                    "citations": [],
                 }
-
-        print("RAW:", raw)
-        print("PARSED:", parsed)
 
         answer = parsed.get(
             "answer",
@@ -142,8 +287,6 @@ Question:
             []
         )
 
-        # ---------- nested JSON inside answer ----------
-
         if (
             isinstance(answer, str)
             and answer.strip().startswith("{")
@@ -152,11 +295,8 @@ Question:
 
             try:
 
-                nested = json.loads(answer)
-
-                print(
-                    "NESTED PARSED:",
-                    nested
+                nested = json.loads(
+                    answer
                 )
 
                 answer = nested.get(
@@ -172,11 +312,11 @@ Question:
             except Exception:
                 pass
 
-        # ---------- build source highlights ----------
-
         sources = []
 
-        for idx, item in enumerate(retrieved):
+        for idx, item in enumerate(
+            retrieved
+        ):
 
             spans = []
             cited_sentences = []
@@ -193,14 +333,12 @@ Question:
 
                 sent = ev["sentence"]
 
-                # exact match
                 start = item[
                     "chunk_text"
                 ].lower().find(
                     sent.lower()
                 )
 
-                # fuzzy fallback
                 if start == -1:
 
                     best_score = 0
@@ -223,6 +361,7 @@ Question:
                         )
 
                         if score > best_score:
+
                             best_score = score
                             best_start = i
 
@@ -248,10 +387,10 @@ Question:
                         cited_sentences
                     ),
                 "highlight_spans":
-                    spans
+                    spans,
             })
-            
-            sources = sorted(
+
+        sources = sorted(
             sources,
             key=lambda x: x["score"],
             reverse=True
@@ -260,7 +399,9 @@ Question:
         return {
             "question": question,
             "answer": answer,
-            "sources": sources
+            "sources": sources,
+            "web_sources": web_sources
+         
         }
 
 
