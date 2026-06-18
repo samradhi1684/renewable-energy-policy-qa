@@ -4,8 +4,10 @@ from rapidfuzz import fuzz
 
 from app.adapters.llm_client import LLMClient
 from app.adapters.retriever import Retriever
-from app.adapters.embedder import Embedder
 from app.services.web_search import search_web
+from app.services.prompt_builder import PromptBuilder
+from app.services.memory_manager import MemoryManager
+from app.services.planner import Planner
 
 
 
@@ -14,7 +16,11 @@ class RAGPipeline:
     def __init__(self):
         self.retriever = Retriever()
         self.llm = LLMClient()
-        self.embedder = Embedder()
+ 
+        self.prompt_builder = PromptBuilder()
+        self.memory = MemoryManager()
+        self.planner = Planner(self.llm)
+    
 
     def generate_chat_title(
         self,
@@ -47,69 +53,8 @@ class RAGPipeline:
             raw = raw.content
 
         return str(raw).strip()[:60]
-    def rewrite_query(
-        self,
-        question: str,
-        chat_history=None,
-    ):
-        if not chat_history or len(chat_history) < 2:
-            return question
-            return question
-
-        history_text = "\n".join(
-            [
-                f"{m.role}: {m.content}"
-                for m in chat_history
-            ]
-        )
-
-        prompt = f"""
-    You rewrite follow-up questions.
-
-    Your job:
-
-    Convert the user's latest question
-    into a fully standalone question.
-
-    Use conversation history.
-
-    Example:
 
 
-    Conversation:
-    user: Explain VW mitigation program
-
-    Question:
-    Summarize that
-
-    Output:
-    Summarize the Volkswagen Mitigation Program.
-
-    Rules:
-
-    - Return ONLY rewritten question
-    - No explanation
-    - Keep original meaning
-
-
-    Conversation History:
-
-    {history_text}
-
-    Latest Question:
-
-    {question}
-
-    Rewritten Question:
-    """
-
-        rewritten = self.llm.generate(
-            prompt,
-            temperature=0.1
-        )
-
-        return rewritten.strip()
-    
     def answer(
         self,
         question: str,
@@ -122,32 +67,49 @@ class RAGPipeline:
 
         web_context = ""
         web_results = []
+        web_sources = []
         
-        history_text = ""
+        memory_context = self.memory.build_context(
+        chat_history 
+        )   
+        decision = self.planner.plan(
+            question,
+            memory_context
+        )
 
-        if chat_history:
+        print("\n--- PLANNER ---")
+        print(json.dumps(
+            decision,
+            indent=2
+        ))
+        print("--------------------")
+        print(
+            "PLANNER DECISION:",
+            decision
+        )
+        search_question = decision.get(
+            "standalone_query"
+        )
 
-            history_lines = []
-
-            for msg in chat_history:
-
-                history_lines.append(
-                    f"{msg.role}: {msg.content}"
-                )
-
-            history_text = "\n".join(
-                history_lines
+        if not isinstance(
+            search_question,
+            str
+        ):
+            print(
+                "Invalid standalone_query from orchestrator"
             )
 
-        if web_search:
+            search_question = question
+        if (
+            web_search
+            or decision["needs_web_search"]
+        ):
 
             print("RUNNING TAVILY SEARCH")
             try:
-                search_question = self.rewrite_query(
-                    question,
-                    chat_history
-                )
-
+    
+    
+             
                 print(
                     "ORIGINAL:",
                     question
@@ -162,13 +124,14 @@ class RAGPipeline:
                 )
                
                 web_sources = [
-                    {
-                        "title": r["title"],
-                        "url": r["url"],
-                        "content": r["content"]
-                    }
-                    for r in web_results[:5]
-                ]
+    {
+        "title": r["title"],
+        "url": r["url"],
+        "content": r["content"]
+    }
+    for r in web_results[:5]
+]
+                
                 print(
                 "WEB RESULTS:",
                 len(web_results)
@@ -196,20 +159,20 @@ class RAGPipeline:
             retrieved = retrieved_override
 
         else:
-            search_question = self.rewrite_query(
-                question,
-                chat_history
-            )
-
+      
+       
             print(
                 "REWRITTEN:",
                 search_question
             )
+            retrieved = []
 
-            retrieved = self.retriever.retrieve(
-                search_question,
-                top_k=top_k
-            )
+            if decision["needs_retrieval"]:
+
+                retrieved = self.retriever.retrieve(
+                    search_question,
+                    top_k=top_k
+                )
 
         evidence_map = {}
         evidence_lines = []
@@ -241,69 +204,23 @@ class RAGPipeline:
         numbered_context = "\n".join(
             evidence_lines
         )
+        prompt = self.prompt_builder.build(
+            intent=decision["intent"],
 
-        web_section = ""
+            question=search_question,
 
-        if web_context:
+            history=memory_context,
 
-            web_section = f"""
+            policy_context=numbered_context,
 
-    Recent Web Information:
-    {web_context}
-    """
+            web_context=web_context,
 
-        prompt = f"""
-You are a Renewable Energy Policy assistant.
-
-You are having an ongoing conversation
-with the user.
-
-Use previous conversation context
-to understand follow-up questions.
-
-Answer using:
-
-1. Policy documents
-2. Recent web information
-
-Rules:
-
-- Understand references like:
-  it, this, that, they, those
-
-- Use conversation history
-  to understand context
-
-- Use policy evidence whenever possible
-
-- Use web information for
-  recent trends, statistics,
-  updates and developments
-
-- Do not invent facts
-
-Return JSON only.
-
-{{
-  "answer":"...",
-  "citations":["S1","S2"]
-}}
-
-Conversation History:
-
-{history_text}
-
-Policy Evidence:
-
-{numbered_context}
-
-{web_section}
-
-Current User Question:
-
-{question}
-"""
-
+            response_mode=decision[
+                "response_mode"
+            ]
+        )
+        
+ 
         raw = self.llm.generate(
             prompt,
             temperature=temperature
@@ -483,9 +400,8 @@ Current User Question:
             "question": question,
             "answer": answer,
             "sources": sources,
-            "web_sources": web_results[:5]
-                if web_search
-                else [],
+            "web_sources": web_sources
+         
         }
 
 
