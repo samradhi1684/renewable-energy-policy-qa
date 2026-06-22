@@ -162,18 +162,26 @@ export async function queryInChat(
   }
 
   // RAG mode with optional web search
+  const formData = new FormData();
+
+  formData.append(
+    "question",
+    question
+  );
+
+  formData.append(
+    "web_search",
+    String(webSearch)
+  );
+
   const res = await fetch(
     `${BASE}/chats/${chatId}/query`,
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        question,
-        web_search: webSearch,
-      }),
+      body: formData,
     }
   );
 

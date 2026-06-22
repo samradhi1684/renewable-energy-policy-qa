@@ -87,10 +87,12 @@ export default function ChatWindow({
                 content={
                   msg.content
                 }
+                created_at={
+                  msg.created_at
+                }
                 sources={
                   msg.sources
                 }
-                created_at={msg.created_at}
                 onSourceClick={
                   onSourceClick
                 }

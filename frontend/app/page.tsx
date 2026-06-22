@@ -349,16 +349,15 @@ export default function Home() {
             chat.id;
         }
 
+
         setActiveMessages(
           (prev) => [
             ...prev,
             {
-              role:
-                "user",
-              content:
-                currentQuestion,
-                created_at:
-                  new Date().toISOString(),
+              role: "user",
+              content: currentQuestion,
+              created_at:
+                new Date().toISOString(),
             },
           ]
         );
@@ -405,10 +404,7 @@ export default function Home() {
             ),
           ];
 
-            const updatedChats =
-              await listChats();
-
-            setChats(updatedChats);
+        
           setActiveMessages(
             (prev) => [
               ...prev,

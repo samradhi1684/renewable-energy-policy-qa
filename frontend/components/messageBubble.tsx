@@ -90,51 +90,44 @@ export default function MessageBubble({
     );
   }
 
+
   if (role === "user") {
     return (
       <div
         style={{
           display: "flex",
-          justifyContent: "flex-end",
+          flexDirection: "column",
+          alignItems: "flex-end",
         }}
       >
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
+            maxWidth: "80%",
+            background: "var(--user-bubble-bg)",
+            color: "var(--user-bubble-text)",
+            borderRadius: "18px 18px 4px 18px",
+            padding: "10px 16px",
+            fontSize: 14,
+            lineHeight: 1.6,
           }}
         >
+          {content}
+        </div>
+
+        {created_at && (
           <div
             style={{
-              maxWidth: "80%",
-              background: "var(--user-bubble-bg)",
-              color: "var(--user-bubble-text)",
-              borderRadius: "18px 18px 4px 18px",
-              padding: "10px 16px",
-              fontSize: 14,
-              lineHeight: 1.6,
+              fontSize: 11,
+              color: "var(--placeholder-text)",
+              marginTop: 4,
             }}
           >
-            {content}
+            {new Date(created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </div>
-
-          {created_at && (
-            <div
-              style={{
-                fontSize: "11px",
-                color: "var(--placeholder-text)",
-                marginTop: "4px",
-                marginRight: "6px",
-              }}
-            >
-              {new Date(created_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     );
   }
@@ -142,10 +135,8 @@ export default function MessageBubble({
   return (
     <div
       style={{
-        display:
-          "flex",
-        flexDirection:
-          "column",
+        display: "flex",
+        flexDirection: "column",
         gap: 8,
       }}
     >
@@ -419,6 +410,7 @@ export default function MessageBubble({
             </button>
           )}
       </div>
+      
     </div>
   );
 }
