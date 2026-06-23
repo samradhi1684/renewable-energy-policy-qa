@@ -65,3 +65,35 @@ async def get_recent_messages(
     return list(
         reversed(messages)
     )
+    
+async def get_message_by_id(
+    db: AsyncSession,
+    message_id: str,
+):
+    result = await db.execute(
+        select(Message).where(
+            Message.id == message_id
+        )
+    )
+
+    return result.scalar_one_or_none()
+
+async def delete_messages_after(
+    db: AsyncSession,
+    chat_id: str,
+    created_at,
+):
+    result = await db.execute(
+        select(Message)
+        .where(
+            Message.chat_id == chat_id,
+            Message.created_at >= created_at
+        )
+    )
+
+    messages = result.scalars().all()
+
+    for m in messages:
+        await db.delete(m)
+
+    await db.commit()

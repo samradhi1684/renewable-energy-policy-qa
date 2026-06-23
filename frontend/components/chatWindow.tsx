@@ -5,6 +5,7 @@ import MessageBubble from "./messageBubble";
 import type { Source } from "../lib/api";
 
 export type Message = {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
@@ -21,6 +22,19 @@ type Props = {
   onRegenerate: (
     index: number
   ) => void;
+  onEditMessage?: (
+  index: number
+) => void;
+
+  editingMessageId?: string | null;
+
+  editingText?: string;
+
+  onEditTextChange?: (
+    value: string
+  ) => void;
+
+  onSaveEdit?: () => void;
 };
 
 export default function ChatWindow({
@@ -28,6 +42,11 @@ export default function ChatWindow({
   loading,
   onSourceClick,
   onRegenerate,
+  onEditMessage,
+  editingMessageId,
+  editingText,
+  onEditTextChange,
+  onSaveEdit,
 }: Props) {
 
   const bottomRef =
@@ -80,7 +99,7 @@ export default function ChatWindow({
           .map(
             (msg, i) => (
               <MessageBubble
-                key={i}
+                key={msg.id || i}
                 role={
                   msg.role
                 }
@@ -99,6 +118,18 @@ export default function ChatWindow({
                     i
                   )
                 }
+                onEdit={
+                  msg.role === "user"
+                    ? () => {
+                        console.log("CHATWINDOW", i);
+                        onEditMessage?.(i)
+                    }
+                    : undefined
+                }
+                isEditing={msg.id === editingMessageId}
+                editText={editingText}
+                onEditTextChange={onEditTextChange}
+                onSaveEdit={onSaveEdit}
               />
             )
           )}

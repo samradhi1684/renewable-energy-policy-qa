@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest import result
 
 from fastapi import (
     APIRouter,
@@ -56,6 +57,8 @@ from app.services.message_service import (
     create_message,
     list_messages,
     get_recent_messages,
+    get_message_by_id,
+    delete_messages_after
 )
 
 from app.services.rag_pipeline import RAGPipeline
@@ -86,6 +89,10 @@ whisper_model = WhisperModel(
 class QueryBody(BaseModel):
     question: str
     web_search: bool = False
+    
+class EditMessageBody(BaseModel):
+    message_id: str
+    new_question: str
 
 class RegenerateBody(BaseModel):
     question: str
@@ -130,6 +137,89 @@ async def search_chat_titles(
         str(current_user.id),
         q,
     )
+@router.patch("/{chat_id}/edit-message")
+async def edit_message(
+    chat_id: str,
+    body: EditMessageBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    print("EDIT ROUTE HIT")
+    print("MESSAGE ID RECEIVED:", body.message_id)
+    # old_message = await get_message_by_id(
+    #     db,
+    #     body.message_id
+    # )
+    print(
+        "MESSAGE ID RECEIVED:",
+        body.message_id
+    )
+
+    old_message = await get_message_by_id(
+        db,
+        body.message_id
+    )
+
+    print(
+        "DB LOOKUP RESULT:",
+        old_message
+    )
+
+    if not old_message:
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found"
+        )
+    print(
+    "DB CHAT ID:",
+    old_message.chat_id,
+    type(old_message.chat_id)
+    )
+
+    print(
+        "ROUTE CHAT ID:",
+        chat_id,
+        type(chat_id)
+    )   
+    if str(old_message.chat_id) != chat_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid message"
+        )
+    # delete everything from edited message onward
+    await delete_messages_after(
+        db,
+        chat_id,
+        old_message.created_at
+    )
+
+    # now fetch clean history
+    history = await get_recent_messages(
+        db,
+        chat_id
+    )
+
+    result = pipeline.answer(
+        body.new_question,
+        chat_history=history,
+        web_search=False
+    )
+
+    await create_message(
+        db,
+        chat_id,
+        "user",
+        body.new_question
+    )
+
+    await create_message(
+        db,
+        chat_id,
+        "assistant",
+        result["answer"]
+    )
+
+    return result
 
 @router.get("/{chat_id}")
 async def get_chat_detail(
@@ -155,12 +245,12 @@ async def get_chat_detail(
 @router.post("/{chat_id}/query")
 async def query_in_chat(
     chat_id: str,
-    question: str = Form(...),
-    file: UploadFile | None = File(None),
-    web_search: bool = Form(False),
+    body: QueryBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+):      
+    question = body.question
+    web_search = body.web_search
     chat = await get_chat(
         db,
         chat_id,
@@ -181,109 +271,24 @@ async def query_in_chat(
     chat_id,
     )
 
-    #
-    # DOCUMENT MODE
-    #
-    if file:
-
-        if file.filename.endswith(".pdf"):
-
-            text = extract_pdf_text(
-                file.file
-            )
-
-        elif file.filename.endswith(".md"):
-
-            text = extract_md_text(
-                file.file
-            )
-
-        else:
-
-            raise HTTPException(
-                status_code=400,
-                detail="Unsupported file type",
-            )
-
-        chunks = chunk_text(text)
-
-        retrieved = retrieve_chunks(
-            question,
-            chunks,
-        )
-
-        context = "\n\n".join(
-            r["chunk_text"]
-            for r in retrieved
-        )
-
-        output_format = detect_format(
-            question
-        )
-
-        prompt = f"""
-        Answer using ONLY the context.
-
-        OUTPUT FORMAT:
-        {output_format.value}
-
-        Rules:
-
-        paragraph:
-        normal answer
-
-        bullets:
-        return bullet points
-
-        table:
-        return markdown table
-
-        json:
-        return valid json only
-
-        markdown:
-        return markdown document
-
-        report:
-        return a structured report with:
-        - Executive Summary
-        - Findings
-        - Analysis
-        - Conclusion
-
-        CONTEXT:
-        {context}
-
-        QUESTION:
-        {question}
-        """
-
-        answer = llm.generate(
-            prompt,
-            temperature=0.2,
-        )
-
-        result = {
-            "answer": answer,
-            "sources": retrieved,
-        }
-
-    #
-    # EXISTING RAG MODE
-    #
-    else:
-
-        result = pipeline.answer(
+    result = pipeline.answer(
             question,
             chat_history=history,
             web_search=web_search,
         )
 
-    await create_message(
+    user_msg = await create_message(
         db,
         chat_id,
         "user",
-        question,
+        body.question
+    )
+
+    assistant_msg = await create_message(
+        db,
+        chat_id,
+        "assistant",
+        result["answer"]
     )
 
     if chat.title == "New Chat":
@@ -308,12 +313,7 @@ async def query_in_chat(
                 e
             )
 
-    await create_message(
-        db,
-        chat_id,
-        "assistant",
-        result["answer"],
-    )
+
 
     #
     # AUTO TITLE GENERATION
@@ -332,9 +332,91 @@ async def query_in_chat(
             title,
         )
 
-    return result
+    return {
+        **result,
+        "user_message_id": str(user_msg.id),
+        "assistant_message_id": str(assistant_msg.id)
+    }
 
+@router.post("/{chat_id}/query-file")
+async def query_with_file(
+    chat_id: str,
+    question: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
 
+    chat = await get_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
+    if file.filename.endswith(".pdf"):
+
+        text = extract_pdf_text(
+            file.file
+        )
+
+    elif file.filename.endswith(".md"):
+
+        text = extract_md_text(
+            file.file
+        )
+
+    else:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type",
+        )
+
+    chunks = chunk_text(text)
+
+    retrieved = retrieve_chunks(
+        question,
+        chunks,
+    )
+
+    context = "\n\n".join(
+        r["chunk_text"]
+        for r in retrieved
+    )
+
+    output_format = detect_format(
+        question
+    )
+
+    prompt = f"""
+Answer using ONLY the context.
+
+OUTPUT FORMAT:
+{output_format.value}
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+"""
+
+    answer = llm.generate(
+        prompt,
+        temperature=0.2,
+    )
+
+    return {
+        "answer": answer,
+        "sources": retrieved,
+    }
+    
 @router.get("/{chat_id}/messages")
 async def get_messages(
     chat_id: str,
@@ -357,7 +439,7 @@ async def get_messages(
         db,
         chat_id,
     )
-
+    print(messages)
     return messages
 
 # NEW: Whisper transcription
@@ -649,4 +731,15 @@ async def regenerate_answer(
         temperature=0.7,
     )
 
-    return result
+    assistant_msg = await create_message(
+        db,
+        chat_id,
+        "assistant",
+        result["answer"]
+    )
+
+    return {
+        **result,
+        "assistant_message_id":
+            str(assistant_msg.id)
+    }

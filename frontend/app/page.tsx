@@ -18,9 +18,11 @@ import {
   deleteChat,
   renameChat,
   pinChat,
+  editMessage,
   type Chat,
   type Source,
 } from "../lib/api";
+
 
 export default function Home() {
 
@@ -54,6 +56,12 @@ export default function Home() {
 
   const [activeMessages, setActiveMessages] =
     useState<Message[]>([]);
+
+  const [editingMessageId, setEditingMessageId] =
+  useState<string | null>(null);
+
+  const [editingText, setEditingText] =
+  useState("");
 
   const [webSearch, setWebSearch] =
   useState(false);
@@ -110,6 +118,7 @@ export default function Home() {
 
     for (const m of messages) {
       formatted.push({
+        id: m.id,
         role: m.role,
         content: m.content,
         created_at: m.created_at,
@@ -265,19 +274,46 @@ export default function Home() {
           assistant.sources || []
         );
 
+      // setActiveMessages(
+      //   (prev) => {
+      //     const next = [...prev];
+
+      //     next[index] = {
+      //       id: crypto.randomUUID(),
+      //       role: "assistant",
+      //       content: response.answer,
+      //       sources: response.sources,
+      //       created_at:
+      //         new Date().toISOString(),
+      //     };
+
+      //     return next;
+      //   }
+      // );
       setActiveMessages(
         (prev) => {
-          const next = [...prev];
 
-          next[index] = {
-            role: "assistant",
-            content: response.answer,
-            sources: response.sources,
+          const updated =
+            [...prev];
+
+          updated[index] = {
+            id:
+              response.assistant_message_id,
+
+            role:
+              "assistant",
+
+            content:
+              response.answer,
+
+            sources:
+              response.sources || [],
+
             created_at:
               new Date().toISOString(),
           };
 
-          return next;
+          return updated;
         }
       );
 
@@ -285,7 +321,152 @@ export default function Home() {
       setLoading(false);
     }
   }
+  // function handleStartEdit(
+  //   index: number
+  // ) {
+  //   const msg =
+  //     activeMessages[index];
 
+  //   if (
+  //     msg.role !== "user"
+  //   )
+  //     return;
+
+  //   setEditingMessageId(
+  //     msg.id || null
+  //   );
+
+  //   setEditingText(
+  //     msg.content
+  //   );
+  // }
+  function handleStartEdit(
+    index: number
+  ) {
+    const msg =
+      activeMessages[index];
+
+    console.log(
+      "START EDIT"
+    );
+
+    console.log(
+      "CLICKED MESSAGE:",
+      msg
+    );
+
+    console.log(
+      "MESSAGE ID:",
+      msg.id
+    );
+
+    if (
+      msg.role !== "user"
+    )
+      return;
+
+    setEditingMessageId(
+      msg.id || null
+    );
+
+    setEditingText(
+      msg.content
+    );
+  }
+  async function handleSaveEdit() {
+
+    if (
+      !activeChatId ||
+      !editingMessageId
+    )
+      return;
+
+    setLoading(true);
+
+    // find edited message index
+    const editIndex =
+      activeMessages.findIndex(
+        (m) =>
+          m.id ===
+          editingMessageId
+      );
+
+    // keep messages before edited one
+    const keptMessages =
+      activeMessages.slice(
+        0,
+        editIndex
+      );
+
+    // edited user message
+    const tempUser: Message = {
+      id: editingMessageId,
+      role: "user",
+      content: editingText,
+      created_at:
+        new Date().toISOString(),
+    };
+
+    // loading placeholder
+    const loadingAssistant: Message = {
+      role: "assistant",
+      content: "__loading__",
+      sources: [],
+    };
+
+    // IMMEDIATELY update UI
+    setActiveMessages([
+      ...keptMessages,
+      tempUser,
+      loadingAssistant,
+    ]);
+
+    try {
+
+      // NOW call backend
+      const response =
+        await editMessage(
+          activeChatId,
+          editingMessageId,
+          editingText
+        );
+
+      const newAssistant: Message = {
+        id:
+          response.assistant_message_id,
+
+        role:
+          "assistant",
+
+        content:
+          response.answer,
+
+        sources:
+          response.sources || [],
+
+        created_at:
+          new Date().toISOString(),
+      };
+
+      // replace loading with real answer
+      setActiveMessages([
+        ...keptMessages,
+        tempUser,
+        newAssistant,
+      ]);
+
+      setEditingMessageId(
+        null
+      );
+
+      setEditingText("");
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  }
   const handleSend =
     useCallback(
       async (
@@ -326,6 +507,19 @@ export default function Home() {
           null
         );
 
+        setActiveMessages(
+          (prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "user",
+              content: currentQuestion,
+              created_at:
+                new Date().toISOString(),
+            },
+          ]
+        );
+
         let chatId =
           activeChatId;
 
@@ -349,19 +543,6 @@ export default function Home() {
             chat.id;
         }
 
-        setActiveMessages(
-          (prev) => [
-            ...prev,
-            {
-              role:
-                "user",
-              content:
-                currentQuestion,
-                created_at:
-                  new Date().toISOString(),
-            },
-          ]
-        );
 
         try {
 
@@ -383,52 +564,64 @@ export default function Home() {
               webSearch
             );
 
-          const combinedSources: Source[] = [
-            ...(response.sources || []),
+          // const combinedSources: Source[] = [
+          //   ...(response.sources || []),
 
-            ...((response.web_sources || []).map(
-              (w: any, idx: number) => ({
-                chunk_id: `web-${idx}`,
-                document_id: w.title,
-                chunk_text: w.content,
+          //   ...((response.web_sources || []).map(
+          //     (w: any, idx: number) => ({
+          //       chunk_id: `web-${idx}`,
+          //       document_id: w.title,
+          //       chunk_text: w.content,
 
-                token_start: 0,
-                token_end: 0,
+          //       token_start: 0,
+          //       token_end: 0,
 
-                evidence: w.url,
-                score: 1,
+          //       evidence: w.url,
+          //       score: 1,
 
-                highlight_spans: [],
+          //       highlight_spans: [],
 
-                is_web: true,
-              } as Source))
-            ),
-          ];
+          //       is_web: true,
+          //     } as Source))
+          //   ),
+          // ];
 
-            const updatedChats =
-              await listChats();
+        
 
-            setChats(updatedChats);
+    
           setActiveMessages(
-            (prev) => [
-              ...prev,
-              {
-                role:
-                  "assistant",
+            (prev) => {
+
+              const updated =
+                [...prev];
+
+              // replace temp user id with real db id
+              updated[
+                updated.length - 1
+              ] = {
+                ...updated[
+                  updated.length - 1
+                ],
+                id:
+                  response.user_message_id,
+              };
+
+              // add assistant with real db id
+              updated.push({
+                id:
+                  response.assistant_message_id,
+                role: "assistant",
                 content:
                   response.answer,
                 sources:
-                  combinedSources,
+                  response.sources || [],
                 created_at:
                   new Date().toISOString(),
-              },
-            ]
+              });
+
+              return updated;
+            }
           );
-
-          const updatedChats =
-            await listChats();
-
-          setChats(updatedChats);
 
         } catch {
 
@@ -436,6 +629,7 @@ export default function Home() {
             (prev) => [
               ...prev,
               {
+                id: crypto.randomUUID(),
                 role:
                   "assistant",
                 content:
@@ -550,6 +744,25 @@ export default function Home() {
             }
             onRegenerate={
               handleRegenerate
+            }
+            onEditMessage={
+              handleStartEdit
+            }
+
+            editingMessageId={
+              editingMessageId
+            }
+
+            editingText={
+              editingText
+            }
+
+            onEditTextChange={
+              setEditingText
+            }
+
+            onSaveEdit={
+              handleSaveEdit
             }
           />
         )}

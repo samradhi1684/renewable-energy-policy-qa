@@ -22,9 +22,11 @@ export type Source = {
 };
 
 export type Message = {
+  id: string;
   role: "user" | "assistant";
   content: string;
   created_at?: string;
+  sources?: Source[];
 };
 
 export type ChatMessage = {
@@ -115,6 +117,8 @@ export async function queryInChat(
   answer: string;
   sources: Source[];
   web_sources?: WebSource[];
+  user_message_id: string;
+  assistant_message_id: string;
 }> {
   const token =
     localStorage.getItem("token");
@@ -141,7 +145,7 @@ export async function queryInChat(
 
     const res =
       await fetch(
-        `${BASE}/chats/${chatId}/query`,
+        `${BASE}/chats/${chatId}/query-file`,
         {
           method: "POST",
           headers: {
@@ -182,6 +186,84 @@ export async function queryInChat(
       "Failed to query"
     );
   }
+
+  return res.json();
+}
+export async function editMessage(
+  chatId: string,
+  messageId: string,
+  newQuestion: string
+) {
+  const token =
+    localStorage.getItem("token");
+
+  const res = await fetch(
+    `${BASE}/chats/${chatId}/edit-message`,
+    {
+      method: "PATCH",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+
+        Authorization:
+          `Bearer ${token}`,
+      },
+
+      body: JSON.stringify({
+        message_id: messageId,
+        new_question: newQuestion,
+      }),
+    }
+  );
+
+  if (!res.ok)
+    throw new Error(
+      "Edit failed"
+    );
+
+  return res.json();
+}
+
+export async function queryFile(
+  chatId: string,
+  question: string,
+  file: File
+) {
+  const token =
+    localStorage.getItem("token");
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "question",
+    question
+  );
+
+  formData.append(
+    "file",
+    file
+  );
+
+  const res = await fetch(
+    `${BASE}/chats/${chatId}/query-file`,
+    {
+      method: "POST",
+
+      headers: {
+        Authorization:
+          `Bearer ${token}`,
+      },
+
+      body: formData,
+    }
+  );
+
+  if (!res.ok)
+    throw new Error(
+      "File query failed"
+    );
 
   return res.json();
 }
@@ -309,6 +391,8 @@ export async function regenerateAnswer(
   answer: string;
   sources: Source[];
   web_sources?: WebSource[];
+  assistant_message_id:
+    string;
 }> {
 
   const token =
