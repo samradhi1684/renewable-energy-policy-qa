@@ -73,19 +73,20 @@ export default function ChatWindow({
         flex: 1,
         overflowY: "auto",
         padding:
-          "24px 16px 8px",
+          "40px 48px 24px",
       }}
     >
       <div
         style={{
-          maxWidth: 680,
+          maxWidth: 980,
+width: "100%",
           margin:
             "0 auto",
           display:
             "flex",
           flexDirection:
             "column",
-          gap: 24,
+          gap: 36,
         }}
       >
 
@@ -98,39 +99,28 @@ export default function ChatWindow({
           )
           .map(
             (msg, i) => (
-              <MessageBubble
-                key={msg.id || i}
-                role={
-                  msg.role
-                }
-                content={
-                  msg.content
-                }
-                sources={
-                  msg.sources
-                }
-                created_at={msg.created_at}
-                onSourceClick={
-                  onSourceClick
-                }
-                onRegenerate={() =>
-                  onRegenerate(
-                    i
-                  )
-                }
-                onEdit={
-                  msg.role === "user"
-                    ? () => {
-                        console.log("CHATWINDOW", i);
-                        onEditMessage?.(i)
-                    }
-                    : undefined
-                }
-                isEditing={msg.id === editingMessageId}
-                editText={editingText}
-                onEditTextChange={onEditTextChange}
-                onSaveEdit={onSaveEdit}
-              />
+              <div key={msg.id || i} className="message-enter">
+                <MessageBubble
+                  role={msg.role}
+                  content={msg.content}
+                  sources={msg.sources}
+                  created_at={msg.created_at}
+                  onSourceClick={onSourceClick}
+                  onRegenerate={() => onRegenerate(i)}
+                  onEdit={
+                    msg.role === "user"
+                      ? () => {
+                          console.log("CHATWINDOW", i);
+                          onEditMessage?.(i);
+                        }
+                      : undefined
+                  }
+                  isEditing={msg.id === editingMessageId}
+                  editText={editingText}
+                  onEditTextChange={onEditTextChange}
+                  onSaveEdit={onSaveEdit}
+                />
+              </div>
             )
           )}
 
@@ -148,12 +138,12 @@ export default function ChatWindow({
             {/* Assistant avatar */}
             <div
               style={{
-                width: 28,
-                height: 28,
+                width: 42,
+                height: 42,
                 borderRadius:
                   "50%",
                 background:
-                  "var(--accent)",
+                  "linear-gradient(135deg,#6366F1,#4F46E5)",
                 display:
                   "flex",
                 alignItems:
@@ -164,8 +154,8 @@ export default function ChatWindow({
               }}
             >
               <svg
-                width="14"
-                height="14"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="white"
@@ -178,15 +168,18 @@ export default function ChatWindow({
 
             {/* Three dots */}
             <div
-              style={{
-                display:
-                  "flex",
-                gap: 4,
-                alignItems:
-                  "center",
-                paddingTop:
-                  8,
-              }}
+             
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          padding: "14px 18px",
+          background: "#FFFFFF",
+          border: "1px solid #E5E7EB",
+          borderRadius: "18px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+        }}
+
             >
               {[0,1,2].map(
                 (i) => (
@@ -221,16 +214,20 @@ export default function ChatWindow({
       </div>
 
       <style>{`
-        @keyframes bounce {
-          0%,80%,100%{
-            transform:translateY(0);
-            opacity:0.4;
-          }
-          40%{
-            transform:translateY(-5px);
-            opacity:1;
-          }
-        }
+  .message-enter{
+    animation:fadeIn .3s ease;
+  }
+
+  @keyframes fadeIn{
+    from{
+      opacity:0;
+      transform:translateY(8px);
+    }
+    to{
+      opacity:1;
+      transform:translateY(0);
+    }
+  }
       `}</style>
     </div>
   );

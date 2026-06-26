@@ -127,13 +127,14 @@ export default function MessageBubble({
 
           <div
             style={{
-              maxWidth: "80%",
-              background: "var(--user-bubble-bg)",
-              color: "var(--user-bubble-text)",
-              borderRadius: "18px 18px 4px 18px",
-              padding: "10px 16px",
-              fontSize: 14,
-              lineHeight: 1.6,
+              maxWidth: "72%",
+              background: "linear-gradient(135deg,#6366F1,#4F46E5)",
+              color: "#ffffff",
+              borderRadius: "22px 22px 6px 22px",
+              padding: "16px 22px",
+              fontSize: 15,
+              fontWeight: 500,
+              boxShadow: "0 8px 24px rgba(79,70,229,0.18)",
             }}
           >
             {isEditing ? (
@@ -149,7 +150,11 @@ export default function MessageBubble({
                   }
                   style={{
                     width: "100%",
-                    padding: "8px",
+                    padding: "12px",
+borderRadius: "12px",
+border: "1px solid #D1D5DB",
+fontSize: "14px",
+marginTop: "6px",
                   }}
                 />
 
@@ -175,8 +180,9 @@ export default function MessageBubble({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 14,
-              marginTop: 6,
+              gap: 12,
+marginTop: 10,
+paddingRight: "6px",
             }}
           >
 
@@ -232,9 +238,10 @@ export default function MessageBubble({
           {created_at && (
             <div
               style={{
-                fontSize: "11px",
+                fontSize: "12px",
+fontWeight: 500,
                 color: "var(--placeholder-text)",
-                marginTop: "4px",
+                marginTop: "8px",
                 marginRight: "6px",
               }}
             >
@@ -250,24 +257,54 @@ export default function MessageBubble({
   }
 
   return (
-    <div
-      style={{
-        display:
-          "flex",
-        flexDirection:
-          "column",
-        gap: 8,
-      }}
-    >
-
+  <div
+    style={{
+      display: "flex",
+      alignItems: "flex-start",
+      gap: "14px",
+      width: "100%",
+    }}
+  >
+<div
+  style={{
+    width: "38px",
+    height: "38px",
+    borderRadius: "50%",
+    background: "#111827",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "13px",
+    fontWeight: 700,
+    flexShrink: 0,
+    marginTop: "2px",
+  }}
+>
+  PL
+</div>
       {/* Answer */}
-    <div>
+{/* assistant content wrapper */}
+<div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    maxWidth: "75%",
+  }}
+>
+
       <div
-        style={{
-          color: "var(--assistant-text)",
-          fontSize: 14,
-          lineHeight: 1.75,
-        }}
+       style={{
+  color: "#1F2937",
+  fontSize: 15,
+  lineHeight: 1.85,
+  background: "#FFFFFF",
+  border: "1px solid #E5E7EB",
+  borderRadius: "22px",
+  padding: "18px 22px",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
+}}
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -383,7 +420,8 @@ export default function MessageBubble({
       {created_at && (
         <div
           style={{
-            fontSize: "11px",
+            fontSize: "12px",
+fontWeight: 500,
             color:
               "var(--placeholder-text)",
             marginTop: "4px",
@@ -397,19 +435,16 @@ export default function MessageBubble({
           })}
         </div>
       )}
-    </div>
 
 
       {/* ChatGPT-style actions */}
       <div
         style={{
-          display:
-            "flex",
-          alignItems:
-            "center",
-          gap: 14,
-          marginTop: 2,
-        }}
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  marginTop: "6px",
+}}
       >
         {/* Copy */}
         <button
@@ -530,26 +565,22 @@ export default function MessageBubble({
           )}
       </div>
     </div>
+     </div>   
   );
 }
 
 const iconBtn = {
-  display:
-    "inline-flex",
-  alignItems:
-    "center",
-  justifyContent:
-    "center",
-  gap: 6,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 4,
   border: "none",
-  background:
-    "transparent",
+  background: "#F8FAFC",
   cursor: "pointer",
-  color:
-    "var(--placeholder-text)",
-  fontSize: 13,
-  padding: 0,
-  opacity: 0.75,
-  transition:
-    "opacity 0.15s ease",
+  color: "#6B7280",
+  fontSize: 12,
+  padding: "6px 8px",
+  borderRadius: "8px",
+  opacity: 1,
+  transition: "all 0.2s ease",
 };

@@ -6,7 +6,7 @@ from sqlalchemy import select, func, or_
 
 from app.models.chat import Chat
 from app.models.message import Message
-
+from app.models.shared_chat import SharedChat
 
 async def create_chat(
     db: AsyncSession,
@@ -137,6 +137,49 @@ async def search_chats(
         .distinct()
         .order_by(
             Chat.created_at.desc()
+        )
+    )
+
+    return result.scalars().all()
+
+async def create_shared_chat(
+    db: AsyncSession,
+    chat_id: str,
+):
+    shared = SharedChat(
+        chat_id=chat_id
+    )
+
+    db.add(shared)
+
+    await db.commit()
+    await db.refresh(shared)
+
+    return shared
+
+async def get_shared_chat(
+    db: AsyncSession,
+    share_id: str,
+):
+    result = await db.execute(
+        select(SharedChat).where(
+            SharedChat.share_id == share_id
+        )
+    )
+
+    return result.scalar_one_or_none()
+
+async def get_chat_messages(
+    db: AsyncSession,
+    chat_id: str,
+):
+    result = await db.execute(
+        select(Message)
+        .where(
+            Message.chat_id == chat_id
+        )
+        .order_by(
+            Message.created_at.asc()
         )
     )
 

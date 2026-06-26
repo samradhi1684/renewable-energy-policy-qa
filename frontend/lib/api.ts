@@ -437,3 +437,47 @@ export async function getMessages(chatId: string) {
 
   return res.json();
 }
+
+export async function shareChat(
+  chatId: string
+) {
+  const token =
+    localStorage.getItem(
+      "token"
+    );
+
+  const res = await fetch(
+    `${BASE}/chats/${chatId}/share`,
+    {
+      method: "POST",
+
+      headers: {
+        Authorization:
+          `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok)
+    throw new Error(
+      "Share failed"
+    );
+
+  return res.json();
+}
+
+export async function getSharedChat(
+  shareId: string
+) {
+  const res = await fetch(
+    `${BASE}/chats/shared/${shareId}`
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      "Shared chat not found"
+    );
+  }
+
+  return res.json();
+}

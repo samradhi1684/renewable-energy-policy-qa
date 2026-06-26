@@ -208,55 +208,61 @@ export default function InputBar({
   return (
   <div
     style={{
-      maxWidth: "760px",
-      margin: "0 auto",
-      width: "100%",
+  maxWidth: "860px",
+  margin: "0 auto",
+  width: "100%",
+  paddingBottom: "6px",
+}}
+  >
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    marginBottom: "8px",
+    paddingLeft: "12px",
+  }}
+>
+  <label
+    style={{
+      fontSize: "12px",
+      color: "#64748B",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      fontWeight: 500,
     }}
   >
-    <div
+    <input
+      type="checkbox"
+      checked={webSearch}
+      onChange={(e) =>
+        onWebSearchChange(
+          e.target.checked
+        )
+      }
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        marginBottom: 6,
+        width: "13px",
+        height: "13px",
+        cursor: "pointer",
       }}
-    >
-      <label
-        style={{
-          fontSize: 13,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={webSearch}
-          onChange={(e) =>
-            onWebSearchChange(
-              e.target.checked
-            )
-          }
-        />
-        🌐 Search Web
-      </label>
-    </div>
-    <div
+    />
+    Search Web
+  </label>
+</div>
+<div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        background:
-          "var(--input-bg)",
-        border:
-          "1px solid var(--input-border)",
-        borderRadius: "24px",
-        padding:
-          "10px 12px",
-        boxShadow:
-          "0 2px 10px rgba(0,0,0,0.04)",
-      }}
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  background: "#FFFFFF",
+  border: "1px solid #E7EAF3",
+  borderRadius: "32px",
+  padding: "10px 14px",
+  minHeight: "60px",
+  boxShadow:
+    "0 4px 18px rgba(15,23,42,0.05)",
+}}
     >
 
 
@@ -288,29 +294,35 @@ export default function InputBar({
         }
         title="Attach document"
         style={{
-          width: "34px",
-          height: "34px",
-          borderRadius: "50%",
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#777",
-          flexShrink: 0,
-        }}
+  width: "38px",
+  height: "38px",
+  borderRadius: "50%",
+  border: "none",
+  background: "#EEF2FF",
+color: "#4F46E5",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+ 
+  fontSize: "22px",
+  fontWeight: 300,
+  flexShrink: 0,
+}}
       >
-        📎
+        +
       </button>
 
       {selectedFile && (
         <div
           style={{
-            fontSize: 12,
-            color: "#666",
-            marginLeft: 8,
-          }}
+  fontSize: "12px",
+  background: "#EEF2FF",
+  color: "#4F46E5",
+  padding: "4px 10px",
+  borderRadius: "14px",
+  whiteSpace: "nowrap",
+}}
         >
           📄 {selectedFile.name}
         </div>
@@ -332,7 +344,7 @@ export default function InputBar({
         onKeyDown={
           handleKeyDown
         }
-        placeholder="Ask queries related to renewable energy policies..."
+        placeholder="Ask about renewable energy policies, incentives, regulations..."
         rows={1}
         style={{
           flex: 1,
@@ -341,10 +353,12 @@ export default function InputBar({
           outline: "none",
           background:
             "transparent",
-          fontSize: 15,
-          color:
-            "var(--foreground)",
-          lineHeight: 1.6,
+          fontSize: "14px",
+fontWeight: 400,
+color: "#0F172A",
+lineHeight: 1.5,
+         
+        
           maxHeight: 200,
           overflowY: "auto",
           fontFamily:
@@ -363,14 +377,14 @@ export default function InputBar({
             : "Voice input"
         }
         style={{
-          width: "34px",
-          height: "34px",
+          width: "38px",
+          height: "38px",
           borderRadius: "50%",
           border: "none",
           background:
             recording
-              ? "#ef4444"
-              : "transparent",
+              ? "#EF4444"
+              : "#F8FAFC",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
@@ -378,7 +392,9 @@ export default function InputBar({
           color:
             recording
               ? "#fff"
-              : "#777",
+              : "#64748B",
+         
+   
           flexShrink: 0,
         }}
       >
@@ -408,27 +424,31 @@ export default function InputBar({
         onClick={() => onSend()}
         disabled={!canSend}
         title="Send"
-        style={{
-          width: "34px",
-          height: "34px",
-          borderRadius: "50%",
-          border: "none",
-         background:
-          canSend
-            ? "#111827"
-            : "#e5e7eb",
-          cursor:
-            canSend
-              ? "pointer"
-              : "not-allowed",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#fff",
-          flexShrink: 0,
-          transition:
-            "all 0.15s",
-        }}
+    style={{
+  width: "40px",
+  height: "40px",
+  borderRadius: "50%",
+  border: "none",
+  background:
+    canSend
+      ? "linear-gradient(135deg,#6366F1,#4F46E5)"
+      : "#E5E7EB",
+  cursor:
+    canSend
+      ? "pointer"
+      : "not-allowed",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#fff",
+  flexShrink: 0,
+  boxShadow:
+    canSend
+      ? "0 4px 12px rgba(99,102,241,0.25)"
+      : "none",
+  transition:
+    "all 0.2s ease",
+}}
       >
         <svg
           width="16"

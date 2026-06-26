@@ -18,6 +18,7 @@ import {
   deleteChat,
   renameChat,
   pinChat,
+  shareChat,
   editMessage,
   type Chat,
   type Source,
@@ -197,6 +198,35 @@ export default function Home() {
         : c
     )
   );
+  }
+
+  async function handleShareChat(
+    chatId: string
+  ) {
+    try {
+      const response =
+        await shareChat(
+          chatId
+        );
+
+      const shareUrl =
+        `${window.location.origin}/share/${response.share_id}`;
+
+      await navigator.clipboard.writeText(
+        shareUrl
+      );
+
+      alert(
+        "Share link copied!"
+      );
+
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        "Failed to share chat"
+      );
+    }
   }
 
   function handleSourceClick(
@@ -653,16 +683,26 @@ export default function Home() {
     );
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background:
-          "var(--background)",
-        overflow:
-          "hidden",
-      }}
-    >
+   
+      // style={{
+      //   display: "flex",
+      //   height: "100vh",
+      //   background:
+      //     "var(--background)",
+      //   overflow:
+      //     "hidden",
+      // }}
+  
+  <div
+    style={{
+      display: "flex",
+      height: "100vh",
+      background: "#f6f7fb",
+      padding: "14px",
+      gap: "14px",
+      overflow: "hidden",
+    }}
+  >
       <Sidebar
         chats={chats}
         activeChatId={
@@ -691,6 +731,7 @@ export default function Home() {
         onPinChat={
           handlePinChat
         }
+        onShareChat={handleShareChat}
         selectedModel={
           selectedModel
         }
@@ -700,16 +741,41 @@ export default function Home() {
       />
 
       <div
+        // style={{
+        //   flex: 1,
+        //   display:
+        //     "flex",
+        //   flexDirection:
+        //     "column",
+        //   overflow:
+        //     "hidden",
+        //   minWidth: 0,
+        // }}
+       
+        // style={{
+        //   flex: 1,
+        //   background: "#ffffff",
+        //   borderRadius: "28px",
+        //   border: "1px solid #e5e7eb",
+        //   position: "relative",
+        //   overflow: "hidden",
+        //   display: "flex",
+        //   flexDirection: "column",
+        // }}
+          
         style={{
           flex: 1,
-          display:
-            "flex",
-          flexDirection:
-            "column",
-          overflow:
-            "hidden",
-          minWidth: 0,
+          background: "#ffffff",
+          borderRadius: "30px",
+          border: "1px solid #ececec",
+          position: "relative",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.03)",
         }}
+
+
       >
         {activeMessages.length ===
         0 ? (
@@ -718,7 +784,7 @@ export default function Home() {
               selectedModel
             }
             onQuestionClick={(
-              q
+              q: string
             ) => {
               setQuestion(q);
 

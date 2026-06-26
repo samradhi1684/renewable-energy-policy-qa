@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { searchChats,exportChat, type Chat } from "../lib/api";
-import { PanelLeft, Plus, MoreVertical, Pin, Pencil, Trash2 , Search, Download} from "lucide-react";
+import { PanelLeft, Plus, MoreVertical, Pin, Pencil, Trash2 , Search, Download,Share2} from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 
@@ -21,8 +21,10 @@ type Props = {
   onDeleteChat: (id: string) => void;
   onRenameChat: (id: string, newTitle: string) => void;
   onPinChat: (id: string, pinned: boolean) => void;
+  onShareChat: (id: string) => void;
   selectedModel: string;
   onModelChange: (model: string) => void;
+  
 };
 
 type MenuState = { chatId: string; x: number; y: number } | null;
@@ -37,6 +39,7 @@ export default function Sidebar({
   onDeleteChat,
   onRenameChat,
   onPinChat,
+  onShareChat,
   selectedModel,
   onModelChange,
 }: Props) {
@@ -174,9 +177,9 @@ export default function Sidebar({
       {/* ── Sidebar panel ── */}
       <aside
         style={{
-          width: isOpen ? "260px" : "0px",
-          minWidth: isOpen ? "260px" : "0px",
-          background: "var(--sidebar-bg)",
+          width: isOpen ? "360px" : "0px",
+          minWidth: isOpen ? "360px" : "0px",
+          background: "#ffffff",
           borderRight: "1px solid var(--sidebar-border)",
           display: "flex",
           flexDirection: "column",
@@ -187,7 +190,15 @@ export default function Sidebar({
         }}
       >
         {/* Inner wrapper keeps content at fixed 260px so it doesn't squish */}
-        <div style={{ width: "260px", display: "flex", flexDirection: "column", height: "100%" }}>
+        <div
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            padding: "14px",
+          }}
+        >
 
  
           {/* Header: Sidebar toggle + Model selector in same line */}
@@ -196,7 +207,7 @@ export default function Sidebar({
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              padding: "4px 6px 10px 6px",
+              padding: "8px 6px 24px 6px",
             }}
           >
             {/* Sidebar Toggle */}
@@ -229,20 +240,45 @@ export default function Sidebar({
             <div style={{ position: "relative", flex: 1 }}>
               <button
                 onClick={() => setModelOpen((v) => !v)}
+                // style={{
+                //   width: "100%",
+                //   display: "flex",
+                //   alignItems: "center",
+                //   justifyContent: "space-between",
+                //   padding: "8px 10px",
+                //   borderRadius: "8px",
+                //   border: "none",
+                //   background: "transparent",
+                //   cursor: "pointer",
+                //   fontSize: "15px",
+                //   fontWeight: 600,
+                //   color: "var(--foreground)",
+                // }}
                 style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 10px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "var(--foreground)",
-                }}
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "16px 20px",
+marginBottom: "30px",
+borderRadius: "18px",
+fontSize: "16px",
+fontWeight: 600,
+
+background:
+"linear-gradient(135deg,#6366F1,#4F46E5)",
+
+boxShadow:
+"0 8px 18px rgba(79,70,229,0.16)",
+
+
+  border: "none",
+
+  cursor: "pointer",
+
+  color: "white",
+
+}}
               >
                 <span>{selectedLabel}</span>
 
@@ -312,18 +348,23 @@ export default function Sidebar({
           <button
             onClick={onNewChat}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "8px 10px",
-              borderRadius: "8px",
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontSize: "14px",
-              color: "var(--foreground)",
-              marginBottom: "8px",
-            }}
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  borderRadius: "16px",
+  background: "transparent",
+border: "none",
+padding: "12px 14px",
+fontSize: "14px",
+color: "#374151",
+justifyContent: "flex-start",
+
+  cursor: "pointer",
+
+  fontWeight: 500,
+
+  marginBottom: "14px",
+}}
             onMouseEnter={(e) =>
               ((e.currentTarget as HTMLButtonElement).style.background = "var(--sidebar-hover)")
             }
@@ -338,10 +379,11 @@ export default function Sidebar({
           style={{
             position: "relative",
             marginBottom: "10px",
+            
           }}
         >
           <Search
-            size={14}
+            size={16}
             style={{
               position: "absolute",
               left: "10px",
@@ -358,19 +400,24 @@ export default function Sidebar({
             onChange={(e) =>
               setSearchTerm(e.target.value)
             }
-            style={{
-              width: "100%",
-              padding: "8px 12px 8px 32px",
-              borderRadius: "8px",
-              border: "1px solid var(--sidebar-border)",
-              background: "transparent",
-              fontSize: "13px",
-              outline: "none",
-            }}
+       style={{
+  width: "100%",
+  borderRadius: "16px",
+padding: "14px 16px 14px 42px",
+fontSize: "14px",
+background: "#FFFFFF",
+border: "1px solid #F1F5F9",
+
+  
+ 
+  outline: "none",
+}}
           />
         </div>
           {/* Chat list */}
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, height: "500px",
+overflowY: "auto",
+paddingRight: "6px"}}>
             {filteredChats.length === 0 ? (
               <p
                 style={{
@@ -390,10 +437,12 @@ export default function Sidebar({
                   <>
                     <p
                       style={{
-                        fontSize: "12px",
+                        
+                        fontSize: "11px",
+color: "#9CA3AF",
+padding: "10px 8px 8px",
                         fontWeight: 600,
-                        color: "var(--placeholder-text)",
-                        padding: "4px 10px 6px",
+                      
                         textTransform: "uppercase",
                         letterSpacing: "0.05em",
                       }}
@@ -422,17 +471,17 @@ export default function Sidebar({
                   <>
                     <p
                       style={{
-                        fontSize: "12px",
+                        fontSize: "11px",
                         fontWeight: 600,
-                        color: "var(--placeholder-text)",
-                        padding: "4px 10px 6px",
+                        color: "#9CA3AF",
+                        padding: "18px 10px 10px",
                         textTransform: "uppercase",
                         letterSpacing: "0.05em",
                       }}
                     >
                       Recent
                     </p>
-                    {unpinned.map((chat) => (
+                    {unpinned.slice(0, 10).map((chat) => (
                       <ChatRow
                         key={chat.id}
                         chat={chat}
@@ -453,64 +502,58 @@ export default function Sidebar({
           </div>
 
           {/* User profile at bottom */}
+          {/* User Profile */}
+
           <div
             style={{
-              borderTop: "1px solid var(--sidebar-border)",
-              paddingTop: "8px",
-              marginTop: "8px",
+              borderTop: "1px solid #ECEFF5",
+              paddingTop: "14px",
+              marginTop: "14px",
             }}
           >
-            <button
+            <div
               style={{
-                width: "100%",
                 display: "flex",
                 alignItems: "center",
-                gap: "10px",
-                padding: "8px 10px",
-                borderRadius: "8px",
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
+                gap: "12px",
+                padding: "12px",
+                borderRadius: "18px",
+                background: "#FAFAFC",
+                border: "1px solid #ECEFF5",
               }}
-              onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLButtonElement).style.background = "var(--sidebar-hover)")
-              }
-              onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLButtonElement).style.background = "transparent")
-              }
             >
               <div
                 style={{
-                  width: "32px",
-                  height: "32px",
+                  width: "42px",
+                  height: "42px",
                   borderRadius: "50%",
-                  background: "#19c37d",
+                  background:
+                    "linear-gradient(135deg,#6366F1,#4F46E5)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "#fff",
-                  fontSize: "13px",
+                  color: "white",
                   fontWeight: 700,
+                  fontSize: "15px",
                   flexShrink: 0,
                 }}
               >
                 {user?.username?.charAt(0).toUpperCase() ?? "U"}
               </div>
+
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  overflow: "hidden",
+                  minWidth: 0,
+                  flex: 1,
                 }}
               >
                 <span
                   style={{
                     fontSize: "14px",
                     fontWeight: 600,
-                    color: "var(--foreground)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    color: "#111827",
                   }}
                 >
                   {user?.username ?? "Guest"}
@@ -519,41 +562,42 @@ export default function Sidebar({
                 <span
                   style={{
                     fontSize: "12px",
-                    color: "var(--placeholder-text)",
+                    color: "#6B7280",
                     overflow: "hidden",
-                    textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
                   }}
                 >
                   {user?.email}
                 </span>
               </div>
-</button>
+            </div>
 
-<button
-  onClick={() => {
-    logout();
-    window.location.href = "/login";
-  }}
-  style={{
-    width: "100%",
-    marginTop: "6px",
-    padding: "8px",
-    borderRadius: "8px",
-    border: "1px solid var(--sidebar-border)",
-    background: "transparent",
-    cursor: "pointer",
-    fontSize: "13px",
-    color: "#ef4444",
-  }}
->
-  Logout
-</button>
+            <button
+              onClick={() => {
+                logout();
+                window.location.href = "/login";
+              }}
+              style={{
+                width: "100%",
+                marginTop: "10px",
+                padding: "12px",
+                borderRadius: "14px",
+                border: "none",
+                background: "#FEF2F2",
+                color: "#DC2626",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: 500,
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        
 
-</div>
-
-</div>
-</aside>
+        </div>
+      </aside>
 
       {/* Expand button shown when sidebar is closed */}
       {!isOpen && (
@@ -572,7 +616,7 @@ export default function Sidebar({
             height: "36px",
             borderRadius: "8px",
             border: "1px solid var(--sidebar-border)",
-            background: "var(--sidebar-bg)",
+            background: "#ffffff",
             color: "var(--foreground)",
             cursor: "pointer",
             boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
@@ -622,6 +666,14 @@ export default function Sidebar({
                   style={{
                     margin: "4px 0",
                     borderTop: "1px solid var(--sidebar-border)",
+                  }}
+                />
+                <ContextMenuItem
+                  icon={<Share2 size={15} />}
+                  label="Share Chat"
+                  onClick={() => {
+                    onShareChat(menu.chatId);
+                    setMenu(null);
                   }}
                 />
                 <ContextMenuItem
@@ -708,10 +760,16 @@ function ChatRow({
       style={{
         display: "flex",
         alignItems: "center",
-        borderRadius: "8px",
-        marginBottom: "2px",
+        borderRadius: "12px",
+        padding: "6px",
+marginBottom: "10px",
+border: "1px solid #F1F3F8",
+
+        
+        
+        
         background: isActive
-          ? "var(--sidebar-active)"
+? "#EEF2FF"
           : hovered
           ? "var(--sidebar-hover)"
           : "transparent",
@@ -723,6 +781,7 @@ function ChatRow({
           flex: 1,
           minWidth: 0,
           textAlign: "left",
+         
           padding: "8px 10px",
           border: "none",
           background: "transparent",
@@ -756,7 +815,11 @@ function ChatRow({
               alignItems: "center",
               gap: "6px",
               fontSize: "14px",
-              color: "var(--foreground)",
+            
+fontWeight: 500,
+lineHeight: "20px",
+color: "#374151",
+           
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",

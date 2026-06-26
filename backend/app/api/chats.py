@@ -1,6 +1,6 @@
 import os
 import tempfile
-from unittest import result
+
 
 from fastapi import (
     APIRouter,
@@ -31,6 +31,9 @@ from app.services.chat_service import (
     delete_chat,
     rename_chat,
     search_chats,
+    create_shared_chat,
+    get_shared_chat,
+    get_chat_messages,
 )
 
 from fastapi import Form
@@ -241,6 +244,66 @@ async def get_chat_detail(
 
     return chat
 
+@router.post("/{chat_id}/share")
+async def share_chat(
+    chat_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    chat = await get_chat(
+        db,
+        chat_id,
+        str(current_user.id),
+    )
+
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
+    shared = await create_shared_chat(
+        db,
+        chat_id,
+    )
+
+    return {
+        "share_id":
+            shared.share_id
+    }
+@router.get("/shared/{share_id}")
+async def get_shared_chat_data(
+    share_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    
+    shared = await get_shared_chat(
+        db,
+        share_id
+    )
+
+    if not shared:
+        raise HTTPException(
+            status_code=404,
+            detail="Shared chat not found"
+        )
+
+    messages = await get_chat_messages(
+        db,
+        shared.chat_id
+    )
+
+    return {
+        "messages": [
+            {
+                "id": str(msg.id),
+                "role": msg.role,
+                "content": msg.content,
+                "created_at": msg.created_at
+            }
+            for msg in messages
+        ]
+    }
 
 @router.post("/{chat_id}/query")
 async def query_in_chat(

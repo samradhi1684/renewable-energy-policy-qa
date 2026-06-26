@@ -5,27 +5,37 @@ class LLMClient:
 
     def __init__(
         self,
-        model: str = "qwen2.5:14b",
-        host: str = "http://localhost:11434"
+        model: str = "qwen-rag",
+        host: str = "http://10.100.71.36:8000",
+        api_key: str = "devansh-qwen-test-69"
     ):
         self.model = model
         self.host = host
+        self.api_key = api_key
 
     def generate(
         self,
         prompt: str,
-        temperature: float = 0.1
+        temperature: float = 0.1,
+        max_tokens: int = 100
     ) -> str:
 
         response = requests.post(
-            f"{self.host}/api/generate",
+            f"{self.host}/v1/chat/completions",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}"
+            },
             json={
                 "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "temperature": temperature
-                }
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens
             },
             timeout=300
         )
@@ -34,4 +44,5 @@ class LLMClient:
 
         data = response.json()
 
-        return data["response"].strip()
+        # OpenAI-style response parsing
+        return data["choices"][0]["message"]["content"].strip()

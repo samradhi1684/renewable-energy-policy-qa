@@ -1,102 +1,146 @@
-type Props = {
+"use client";
+
+interface EmptyStateProps {
   selectedModel: string;
-  onQuestionClick: (question: string) => void;
-};
+  onQuestionClick: (
+    question: string
+  ) => void;
+}
 
 export default function EmptyState({
   selectedModel,
   onQuestionClick,
-}: Props) {
+}: EmptyStateProps) {
+
+  const questionSets = {
+    mnre: [
+      "What are India's current solar energy subsidies?",
+      "India's National Green Hydrogen Mission explained",
+      "EV charging incentives in India",
+      "Solar rooftop subsidy schemes in 2026",
+    ],
+
+    dsire: [
+      "Explain Inflation Reduction Act key provisions",
+      "Federal EV tax credit eligibility",
+      "US renewable energy grant programs",
+      "Compare solar incentives across US states",
+    ],
+  };
+
+  const questions =
+    questionSets[
+      selectedModel as keyof typeof questionSets
+    ] || questionSets.mnre;
+
+  const isIndia =
+    selectedModel === "mnre";
+
   return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "40px 24px",
-        gap: "16px",
-      }}
-    >
-      {/* Model badge */}
-      <div
-        style={{
-          background: "#f0faf6",
-          border: "1px solid #c3e6d8",
-          borderRadius: "20px",
-          padding: "4px 14px",
-          fontSize: "13px",
-          fontWeight: 600,
-          color: "#19c37d",
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
-        }}
-      >
-        {selectedModel.toUpperCase()}
-      </div>
+    <div className="w-full h-full flex items-center justify-center px-8">
 
-      <h1
-        style={{
-          fontSize: "28px",
-          fontWeight: 600,
-          color: "var(--foreground)",
-          margin: 0,
-          textAlign: "center",
-        }}
-      >
-        Renewable Energy Policy QA
-      </h1>
+      {/* MAIN CONTAINER */}
+      {/* <div className="w-full max-w-6xl flex flex-col items-center"> */}
+      <div className="w-full h-full flex flex-col items-center justify-center px-8 -mt-20">
 
-      <p
-        style={{
-          fontSize: "15px",
-          color: "var(--placeholder-text)",
-          margin: 0,
-          textAlign: "center",
-          maxWidth: "380px",
-          lineHeight: "1.6",
-        }}
-      >
-        Ask questions about renewable energy policies from DSIRE and MNRE documents.
-      </p>
+        {/* small badge */}
+        <div className="mb-5 px-4 py-1 rounded-full bg-indigo-50 border border-indigo-100">
+          <span className="text-indigo-600 text-sm font-medium">
+            Renewable Policy Assistant
+          </span>
+        </div>
 
-      {/* Suggestion chips */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "10px",
-          justifyContent: "center",
-          marginTop: "12px",
-          maxWidth: "600px",
-        }}
-      >
-        {[
-          "Where are Park & Plug chargers installed?",
-          "Explain VW Mitigation Program",
-          "What are the total Beat the Peak savings?",
-          "When are Indiana off-peak charging hours?",
-        ].map((q) => (
-            <button
-            key={q}
-            onClick={() => onQuestionClick(q)}
-            style={{
-                padding: "10px 16px",
-                borderRadius: "12px",
-                border: "1px solid var(--sidebar-border)",
-                background: "var(--sidebar-bg)",
-                cursor: "pointer",
-                fontSize: "13px",
-                color: "var(--foreground)",
-                transition: "background 0.15s",
-                textAlign: "left",
-                lineHeight: "1.4",
-            }}
-            >
-            {q}
-</button>
-        ))}
+        {/* heading */}
+        <h1 className="text-5xl font-bold text-gray-900 mb-4 text-center tracking-tight">
+          What would you like to explore today?
+        </h1>
+
+        <p className="text-gray-500 text-lg text-center max-w-2xl leading-8 mb-14">
+          Explore renewable energy policies, sustainability incentives,
+          climate regulations, and clean energy programs.
+        </p>
+
+        {/* cards */}
+        <div className="grid grid-cols-2 gap-7 w-full max-w-5xl">
+
+          {questions.map(
+            (
+              question,
+              index
+            ) => (
+              <button
+                key={index}
+                onClick={() =>
+                  onQuestionClick(
+                    question
+                  )
+                }
+                className="
+                  group
+                  bg-white
+                  border
+                  border-gray-200
+                  rounded-3xl
+                  p-7
+                  min-h-[170px]
+                  text-left
+                  transition-all
+                  duration-300
+                  hover:shadow-xl
+                  hover:border-indigo-200
+                  hover:-translate-y-1
+                  relative
+                  overflow-hidden
+                "
+              >
+
+                {/* top accent */}
+                <div
+                  className={`
+                    absolute top-0 left-0 h-2 w-full
+                    ${
+                      isIndia
+                        ? "bg-green-500"
+                        : "bg-indigo-600"
+                    }
+                  `}
+                />
+
+                {/* badge */}
+                <div
+                  className={`
+                    inline-flex px-3 py-1 rounded-full text-xs
+                    font-semibold text-white mb-6
+                    ${
+                      isIndia
+                        ? "bg-green-500"
+                        : "bg-indigo-600"
+                    }
+                  `}
+                >
+                  {isIndia
+                    ? "India"
+                    : "USA"}
+                </div>
+
+                {/* question */}
+                <p className="text-gray-800 font-medium text-[17px] leading-7 pr-10">
+                  {question}
+                </p>
+
+                {/* arrow */}
+                <div className="absolute bottom-6 right-6 text-gray-300 text-2xl group-hover:text-indigo-600 transition">
+                  →
+                </div>
+              </button>
+            )
+          )}
+        </div>
+
+        {/* helper */}
+        <p className="mt-10 text-gray-400 text-sm">
+          Click a suggestion to begin instantly
+        </p>
       </div>
     </div>
   );
