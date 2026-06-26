@@ -126,16 +126,20 @@ export default function MessageBubble({
         >
 
           <div
-            style={{
-              maxWidth: "72%",
-              background: "linear-gradient(135deg,#6366F1,#4F46E5)",
-              color: "#ffffff",
-              borderRadius: "22px 22px 6px 22px",
-              padding: "16px 22px",
-              fontSize: 15,
-              fontWeight: 500,
-              boxShadow: "0 8px 24px rgba(79,70,229,0.18)",
-            }}
+         
+  style={{
+    maxWidth: "72%",
+    background: "linear-gradient(135deg,#5B5FF8,#4F46E5)",
+    color: "#ffffff",
+    borderRadius: "20px 20px 6px 20px",
+    padding: "14px 20px",
+    fontSize: "14px",
+    fontWeight: 500,
+    lineHeight: 1.7,
+    letterSpacing: "-0.01em",
+    boxShadow: "0 4px 14px rgba(79,70,229,0.14)",
+  }}
+
           >
             {isEditing ? (
 
@@ -238,8 +242,9 @@ paddingRight: "6px",
           {created_at && (
             <div
               style={{
-                fontSize: "12px",
-fontWeight: 500,
+                fontSize: "11px",
+fontWeight: 400,
+opacity: 0.75,
                 color: "var(--placeholder-text)",
                 marginTop: "8px",
                 marginRight: "6px",
@@ -261,7 +266,7 @@ fontWeight: 500,
     style={{
       display: "flex",
       alignItems: "flex-start",
-      gap: "14px",
+      gap: "18px",
       width: "100%",
     }}
   >
@@ -270,12 +275,13 @@ fontWeight: 500,
     width: "38px",
     height: "38px",
     borderRadius: "50%",
-    background: "#111827",
-    color: "#fff",
+    background: "#EEF2FF",
+    color: "#4F46E5",
+    border: "1px solid #E0E7FF",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "13px",
+    fontSize: "12px",
     fontWeight: 700,
     flexShrink: 0,
     marginTop: "2px",
@@ -290,20 +296,23 @@ fontWeight: 500,
     display: "flex",
     flexDirection: "column",
     gap: "8px",
-    maxWidth: "75%",
+    maxWidth: "820px",
+width: "100%",
   }}
 >
 
       <div
        style={{
-  color: "#1F2937",
-  fontSize: 15,
-  lineHeight: 1.85,
+  color: "#111827",
+  fontSize: "14px",
+  fontWeight: 400,
+  lineHeight: 1.75,
   background: "#FFFFFF",
-  border: "1px solid #E5E7EB",
-  borderRadius: "22px",
-  padding: "18px 22px",
-  boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
+  border: "1px solid #F1F5F9",
+  borderRadius: "18px",
+  padding: "16px 20px",
+  boxShadow: "0 3px 10px rgba(0,0,0,0.03)",
+  letterSpacing: "-0.01em",
 }}
       >
         <ReactMarkdown
@@ -368,14 +377,16 @@ fontWeight: 500,
               </td>
             ),
 
-            p: ({ children }) => (
-              <p
-                style={{
-                  marginBottom: 12,
-                }}
-              >
-                {children}
-              </p>
+           p: ({ children }) => (
+            <p
+              style={{
+                marginBottom: 14,
+                lineHeight: 1.8,
+                color: "#374151",
+              }}
+            >
+              {children}
+            </p>
             ),
 
             ul: ({ children }) => (
@@ -575,12 +586,12 @@ const iconBtn = {
   justifyContent: "center",
   gap: 4,
   border: "none",
-  background: "#F8FAFC",
+  background: "transparent",
   cursor: "pointer",
-  color: "#6B7280",
-  fontSize: 12,
-  padding: "6px 8px",
-  borderRadius: "8px",
+  color: "#94A3B8",
+  fontSize: 11,
+  padding: "2px",
+  borderRadius: "6px",
   opacity: 1,
   transition: "all 0.2s ease",
 };
