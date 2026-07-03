@@ -1,603 +1,122 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-
-import ChatWindow, { type Message } from "../components/chatWindow";
-import InputBar from "../components/inputBar";
-import Sidebar from "../components/sideBar";
-import EmptyState from "../components/emptyState";
-import SourcePane from "../components/sourcePane";
-
-import {
-  createChat,
-  listChats,
-  getChat,
-  getMessages,
-  queryInChat,
-  regenerateAnswer,
-  deleteChat,
-  renameChat,
-  pinChat,
-  type Chat,
-  type Source,
-} from "../lib/api";
-
-export default function Home() {
-
-  const [question, setQuestion] =
-    useState("");
-
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(null);
-
-    useEffect(() => {
-      console.log(
-        "selectedFile:",
-        selectedFile
-      );
-    }, [selectedFile]);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [sidebarOpen, setSidebarOpen] =
-    useState(true);
-
-  const [selectedModel, setSelectedModel] =
-    useState("dsire");
-
-  const [chats, setChats] =
-    useState<Chat[]>([]);
-
-  const [activeChatId, setActiveChatId] =
-    useState<string | null>(null);
-
-  const [activeMessages, setActiveMessages] =
-    useState<Message[]>([]);
-
-  const [webSearch, setWebSearch] =
-  useState(false);
-
-  useEffect(() => {
-  console.log(
-    "webSearch state:",
-    webSearch
-  );
-}, [webSearch]);
-
-  const [
-    sourcePaneSources,
-    setSourcePaneSources
-  ] = useState<Source[] | null>(
-    null
-  );
-
-  const [
-    sourcePaneIndex,
-    setSourcePaneIndex
-  ] = useState(0);
-
-  useEffect(() => {
-    listChats()
-      .then(setChats)
-      .catch(() => {});
-  }, []);
-
-
-
-  async function handleNewChat() {
-    const chat = await createChat();
-
-    setChats((prev) => [
-      chat,
-      ...prev,
-    ]);
-
-    setActiveChatId(chat.id);
-
-    setActiveMessages([]);
-    setSourcePaneSources(null);
-  }
-
-
-  async function handleSelectChat(id: string) {
-    setActiveChatId(id);
-    setSourcePaneSources(null);
-
-    const messages = await getMessages(id);
-
-    const formatted: Message[] = [];
-
-    for (const m of messages) {
-      formatted.push({
-        role: m.role,
-        content: m.content,
-        created_at: m.created_at,
-      });
-    }
-
-    setActiveMessages(formatted);
-  }
-
-  async function handleDeleteChat(
-    id: string
-  ) {
-
-    await deleteChat(id);
-
-    setChats((prev) =>
-      prev.filter(
-        (c) =>
-          c.id !== id
-      )
-    );
-
-    if (
-      activeChatId === id
-    ) {
-      setActiveChatId(null);
-      setActiveMessages([]);
-      setSourcePaneSources(
-        null
-      );
-    }
-  }
-
-  async function handleRenameChat(
-    id: string,
-    newTitle: string
-  ) {
-
-    const updated =
-      await renameChat(
-        id,
-        newTitle
-      );
-
-    setChats((prev) =>
-      prev.map((c) =>
-
-        c.id === id
-          ? {
-              ...c,
-              title: updated.title,
-            }
-          : c
-      )
-    );
-  }
-
-  async function handlePinChat(
-    id: string,
-    pinned: boolean
-  ) {
-
-    const updated =
-      await pinChat(
-        id,
-        pinned
-      );
-
-  setChats((prev) =>
-    prev.map((c) =>
-      c.id === id
-        ? {
-            ...c,
-            pinned: updated.pinned,
-          }
-        : c
-    )
-  );
-  }
-
-  function handleSourceClick(
-    sources: Source[],
-    index: number
-  ) {
-    if (
-      sourcePaneSources === sources &&
-      sourcePaneIndex === index
-    ) {
-      setSourcePaneSources(null);
-      return;
-    }
-
-    setSourcePaneSources(
-      sources
-    );
-
-    setSourcePaneIndex(
-      index
-    );
-  }
-
-  async function handleRegenerate(
-    index: number
-  ) {
-
-    if (!activeChatId)
-      return;
-
-    const assistant =
-      activeMessages[index];
-
-    const user =
-      activeMessages[
-        index - 1
-      ];
-
-    if (
-      !assistant ||
-      !user ||
-      assistant.role !==
-        "assistant" ||
-      user.role !==
-        "user"
-    ) {
-      return;
-    }
-
-    setLoading(true);
-    // remove old assistant answer
-    setActiveMessages(
-      (prev) => {
-
-        const next =
-          [...prev];
-
-        next[index] = {
-          role:
-            "assistant",
-          content:
-            "__loading__",
-          sources: [],
-        };
-
-        return next;
-      }
-    );
-    try {
-
-      const response =
-        await regenerateAnswer(
-          activeChatId,
-          user.content,
-          assistant.sources || []
-        );
-
-      setActiveMessages(
-        (prev) => {
-          const next = [...prev];
-
-          next[index] = {
-            role: "assistant",
-            content: response.answer,
-            sources: response.sources,
-            created_at:
-              new Date().toISOString(),
-          };
-
-          return next;
-        }
-      );
-
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const handleSend =
-    useCallback(
-      async (
-          overrideQuestion?: any
-      ) => {
-        console.log(
-          "overrideQuestion =",
-          overrideQuestion
-        );
-      const currentQuestion =
-        typeof overrideQuestion ===
-        "string"
-          ? overrideQuestion
-          : question;
-
-        console.log(
-          "currentQuestion:",
-          currentQuestion
-        );
-
-        console.log(
-          "type:",
-          typeof currentQuestion
-        );
-
-        if (
-          currentQuestion.trim() === "" ||
-          loading
-        ) {
-          return;
-        }
-          
-
-        setQuestion("");
-        setSelectedFile(null);
-        setLoading(true);
-        setSourcePaneSources(
-          null
-        );
-
-        let chatId =
-          activeChatId;
-
-        if (!chatId) {
-
-          const chat =
-            await createChat();
-
-          setChats(
-            (prev) => [
-              chat,
-              ...prev,
-            ]
-          );
-
-          setActiveChatId(
-            chat.id
-          );
-
-          chatId =
-            chat.id;
-        }
-
-
-        setActiveMessages(
-          (prev) => [
-            ...prev,
-            {
-              role: "user",
-              content: currentQuestion,
-              created_at:
-                new Date().toISOString(),
-            },
-          ]
-        );
-
-        try {
-
-          console.log(
-            "QUESTION SENT:",
-            currentQuestion
-          );
-
-          console.log(
-            "WEB SEARCH:",
-            webSearch
-          );
-
-          const response =
-            await queryInChat(
-              chatId,
-              currentQuestion,
-              selectedFile || undefined,
-              webSearch
-            );
-
-          const combinedSources: Source[] = [
-            ...(response.sources || []),
-
-            ...((response.web_sources || []).map(
-              (w: any, idx: number) => ({
-                chunk_id: `web-${idx}`,
-                document_id: w.title,
-                chunk_text: w.content,
-
-                token_start: 0,
-                token_end: 0,
-
-                evidence: w.url,
-                score: 1,
-
-                highlight_spans: [],
-
-                is_web: true,
-              } as Source))
-            ),
-          ];
-
-        
-          setActiveMessages(
-            (prev) => [
-              ...prev,
-              {
-                role:
-                  "assistant",
-                content:
-                  response.answer,
-                sources:
-                  combinedSources,
-                created_at:
-                  new Date().toISOString(),
-              },
-            ]
-          );
-
-          const updatedChats =
-            await listChats();
-
-          setChats(updatedChats);
-
-        } catch {
-
-          setActiveMessages(
-            (prev) => [
-              ...prev,
-              {
-                role:
-                  "assistant",
-                content:
-                  "Sorry, something went wrong.",
-                created_at:
-                    new Date().toISOString(),
-              },
-            ]
-          );
-
-        } finally {
-          setLoading(false);
-        }
-      },
-      [
-        question,
-        loading,
-        activeChatId,
-        webSearch,
-      ]
-    );
+import { useRouter } from "next/navigation";
+import AuthLayout from "../components/authLayout";
+
+export default function LandingPage() {
+  const router = useRouter();
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background:
-          "var(--background)",
-        overflow:
-          "hidden",
-      }}
+    <AuthLayout
+    imageSrc="/images/landing.png"
+    imageAlt="Renewable energy landscape"
     >
-      <Sidebar
-        chats={chats}
-        activeChatId={
-          activeChatId
-        }
-        isOpen={
-          sidebarOpen
-        }
-        onToggle={() =>
-          setSidebarOpen(
-            (v) => !v
-          )
-        }
-        onNewChat={
-          handleNewChat
-        }
-        onSelectChat={
-          handleSelectChat
-        }
-        onDeleteChat={
-          handleDeleteChat
-        }
-        onRenameChat={
-          handleRenameChat
-        }
-        onPinChat={
-          handlePinChat
-        }
-        selectedModel={
-          selectedModel
-        }
-        onModelChange={
-          setSelectedModel
-        }
-      />
-
-      <div
-        style={{
-          flex: 1,
-          display:
-            "flex",
-          flexDirection:
-            "column",
-          overflow:
-            "hidden",
-          minWidth: 0,
-        }}
-      >
-        {activeMessages.length ===
-        0 ? (
-          <EmptyState
-            selectedModel={
-              selectedModel
-            }
-            onQuestionClick={(
-              q
-            ) => {
-              setQuestion(q);
-
-              setTimeout(
-                () =>
-                  handleSend(
-                    q
-                  ),
-                0
-              );
+      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            gap: "20px",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "34px",
+              fontWeight: 700,
+              lineHeight: 1.2,
+              margin: 0,
+              color: "var(--foreground)",
             }}
-          />
-        ) : (
-          <ChatWindow
-            messages={
-              activeMessages
-            }
-            loading={
-              loading
-            }
-            onSourceClick={
-              handleSourceClick
-            }
-            onRegenerate={
-              handleRegenerate
-            }
-          />
-        )}
+          >
+            Your Gateway to Renewable Energy Policies
+          </h1>
+
+          <p
+            style={{
+              fontSize: "15px",
+              lineHeight: 1.7,
+              color: "var(--placeholder-text)",
+              margin: 0,
+              maxWidth: "440px",
+            }}
+          >
+            An AI assistant that helps you understand government policies,
+            targets and incentives that shape clean energy and help empower
+            Renewable production backed by a primary source.
+          </p>
+
+          <div style={{ marginTop: "8px" }}>
+            <p style={{ fontSize: "14px", color: "var(--placeholder-text)", margin: "0 0 6px" }}>
+              Explore clean energy policies of:
+            </p>
+            <p style={{ fontSize: "15px", margin: "2px 0", color: "var(--foreground)" }}>
+              India 🇮🇳
+            </p>
+            <p style={{ fontSize: "15px", margin: "2px 0", color: "var(--foreground)" }}>
+              United States of America 🇺🇸
+            </p>
+          </div>
+        </div>
 
         <div
           style={{
-            padding:
-              "12px 24px 20px",
-            background:
-              "var(--background)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
           }}
         >
-          <InputBar
-            value={question}
-            onChange={setQuestion}
-            onSend={handleSend}
-            loading={loading}
-            selectedFile={selectedFile}
-            onFileSelect={setSelectedFile}
-            webSearch={webSearch}
-            onWebSearchChange={(value) => {
-              console.log(
-                "checkbox changed:",
-                value
-              );
+          <p style={{ fontSize: "14px", color: "var(--placeholder-text)", margin: 0 }}>
+            Understand renewable policies that shape world,{" "}
+            <button
+              onClick={() => router.push("/signup")}
+              style={{
+                border: "none",
+                background: "none",
+                padding: 0,
+                color: "var(--primary)",
+                fontWeight: 700,
+                fontSize: "14px",
+                cursor: "pointer",
+              }}
+            >
+              Get Started
+            </button>
+          </p>
 
-              setWebSearch(value);
+          <button
+            onClick={() => router.push("/signup")}
+            aria-label="Get started"
+            style={{
+              width: "56px",
+              height: "56px",
+              borderRadius: "16px",
+              border: "none",
+              background: "var(--primary)",
+              boxShadow: "0 8px 20px rgba(91, 79, 229, 0.35)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              transition: "background 0.15s",
             }}
-          />
+            onMouseEnter={(e) =>
+              ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary-hover)")
+            }
+            onMouseLeave={(e) =>
+              ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary)")
+            }
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="7" y1="17" x2="17" y2="7" />
+              <polyline points="7 7 17 7 17 17" />
+            </svg>
+          </button>
         </div>
       </div>
-
-      {sourcePaneSources &&
-        sourcePaneSources.length >
-          0 && (
-          <SourcePane
-            sources={
-              sourcePaneSources
-            }
-            activeIndex={
-              sourcePaneIndex
-            }
-            onSelectSource={
-              setSourcePaneIndex
-            }
-            onClose={() =>
-              setSourcePaneSources(
-                null
-              )
-            }
-          />
-        )}
-    </div>
+    </AuthLayout>
   );
 }

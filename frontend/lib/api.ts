@@ -25,6 +25,9 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   created_at?: string;
+
+  download_url?: string;
+  download_type?: string;
 };
 
 export type ChatMessage = {
@@ -115,6 +118,9 @@ export async function queryInChat(
   answer: string;
   sources: Source[];
   web_sources?: WebSource[];
+
+  download_url?: string;
+  download_type?: string;
 }> {
   const token =
     localStorage.getItem("token");

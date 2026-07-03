@@ -9,6 +9,9 @@ export type Message = {
   content: string;
   sources?: Source[];
   created_at?: string;
+
+  download_url?: string;
+  download_type?: string;
 };
 
 type Props = {
@@ -29,6 +32,11 @@ export default function ChatWindow({
   onSourceClick,
   onRegenerate,
 }: Props) {
+
+  console.log(
+    "CHAT WINDOW MESSAGES:",
+    messages
+  );
 
   const bottomRef =
     useRef<HTMLDivElement>(
@@ -79,6 +87,7 @@ export default function ChatWindow({
           )
           .map(
             (msg, i) => (
+            
               <MessageBubble
                 key={i}
                 role={
@@ -93,6 +102,15 @@ export default function ChatWindow({
                 sources={
                   msg.sources
                 }
+
+                downloadUrl={
+                  msg.download_url
+                }
+
+                downloadType={
+                  msg.download_type
+                }
+
                 onSourceClick={
                   onSourceClick
                 }

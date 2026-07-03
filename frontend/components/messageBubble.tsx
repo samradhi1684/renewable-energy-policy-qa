@@ -11,6 +11,9 @@ type Props = {
   content: string;
   created_at?: string;
   sources?: Source[];
+
+  downloadUrl?: string;
+  downloadType?: string;
   onSourceClick?: (
     sources: Source[],
     index: number
@@ -24,6 +27,10 @@ export default function MessageBubble({
   content,
   created_at,
   sources,
+
+  downloadUrl,
+  downloadType,
+
   onSourceClick,
   onRegenerate,
 }: Props) {
@@ -150,6 +157,8 @@ export default function MessageBubble({
           lineHeight: 1.75,
         }}
       >
+
+      {!downloadUrl && (
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -259,6 +268,7 @@ export default function MessageBubble({
         >
           {content}
         </ReactMarkdown>
+        )}
       </div>
 
       {created_at && (
@@ -380,6 +390,56 @@ export default function MessageBubble({
   
         </button>
       )}
+
+        {downloadUrl && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                color: "var(--assistant-text)",
+              }}
+            >
+              Here's your {downloadType?.toUpperCase()}:
+            </div>
+
+            <a
+              href={downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              textDecoration: "none",
+              color: "var(--placeholder-text)",
+              fontSize: 13,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M12 3v12" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M5 21h14" />
+          </svg>
+
+          Download {downloadType?.toUpperCase()}
+          </a>
+          </div>
+        )}
+
+
               {/* Sources */}
         {sources &&
           sources.length >

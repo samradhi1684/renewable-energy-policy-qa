@@ -1,10 +1,9 @@
 import uuid
 
-from sqlalchemy import String
+from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
 
 class User(Base):
     __tablename__ = "users"
@@ -28,5 +27,29 @@ class User(Base):
 
     hashed_pw: Mapped[str] = mapped_column(
         String,
+        nullable=False,
+    )
+
+
+    # ---------- NEW ----------
+
+    display_name: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
+
+    role: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
+
+    country: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
+
+    onboarding_completed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
         nullable=False,
     )

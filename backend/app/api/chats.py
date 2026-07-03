@@ -32,6 +32,13 @@ from app.services.chat_service import (
     search_chats,
 )
 
+import uuid
+from pathlib import Path
+
+from app.services.download_service import (
+    generate_download_file,
+)
+
 from fastapi import Form
 from fastapi import UploadFile
 from fastapi import File
@@ -58,7 +65,7 @@ from app.services.message_service import (
     get_recent_messages,
 )
 
-from app.services.rag_pipeline import RAGPipeline
+from app.services.new_pipeline.pipeline import pipeline
 from fastapi.responses import (
     PlainTextResponse,
     Response,
@@ -73,8 +80,11 @@ router = APIRouter(
     tags=["chats"]
 )
 
-pipeline = RAGPipeline()
+
 llm = LLMClient()
+
+GENERATED_DIR = Path("generated")
+GENERATED_DIR.mkdir(exist_ok=True)
 
 # Load Whisper once
 whisper_model = WhisperModel(
@@ -274,10 +284,10 @@ async def query_in_chat(
     else:
 
         result = pipeline.answer(
-            question,
-            chat_history=history,
-            web_search=web_search,
-        )
+                    question,
+                    chat_history=history,
+                    web_search=web_search,
+                )
 
     await create_message(
         db,
@@ -285,6 +295,47 @@ async def query_in_chat(
         "user",
         question,
     )
+
+    download_url = None
+
+    question_lower = question.lower()
+
+    requested_format = None
+
+    if "pdf" in question_lower:
+        requested_format = "pdf"
+
+    elif "docx" in question_lower:
+        requested_format = "docx"
+
+    elif "xlsx" in question_lower:
+        requested_format = "xlsx"
+
+    elif "json" in question_lower:
+        requested_format = "json"
+
+    elif "markdown" in question_lower or "md" in question_lower:
+        requested_format = "md"
+
+    if requested_format:
+
+        filename = (
+            f"{uuid.uuid4()}.{requested_format}"
+        )
+
+        filepath = (
+            GENERATED_DIR / filename
+        )
+
+        generate_download_file(
+            content=result["answer"],
+            file_type=requested_format,
+            output_path=str(filepath),
+        )
+
+        download_url = (
+            f"http://127.0.0.1:8000/downloads/{filename}"
+        )
 
     if chat.title == "New Chat":
 
@@ -331,6 +382,24 @@ async def query_in_chat(
             str(current_user.id),
             title,
         )
+
+    if download_url:
+        result["download_url"] = download_url
+        result["download_type"] = requested_format
+
+    preview = llm.generate(
+        f"""
+        In one sentence explain what was generated.
+
+        User request:
+        {question}
+
+        Generated content:
+        {result['answer'][:1500]}
+        """
+    )
+
+    result["file_message"] = preview
 
     return result
 

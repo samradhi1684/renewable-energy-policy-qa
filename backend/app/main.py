@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.query import router as query_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,12 @@ logging.getLogger(
 app = FastAPI(
     title="QA System",
     version="0.0.1"
+)
+
+app.mount(
+    "/downloads",
+    StaticFiles(directory="generated"),
+    name="downloads",
 )
 
 app.add_middleware(

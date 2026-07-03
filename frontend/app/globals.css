@@ -18,6 +18,8 @@
   --sources-bg: #f9f9f9;
   --sources-border: #e5e5e5;
   --accent: #10a37f;
+  --primary: #5b4fe5;
+  --primary-hover: #4c40d1;
 }
 
 * {
