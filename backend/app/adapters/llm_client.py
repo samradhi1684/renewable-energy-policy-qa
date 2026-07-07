@@ -1,5 +1,6 @@
 import requests
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,67 @@ class LLMClient:
         )
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
-    
+
+    def generate_stream(
+        self,
+        prompt: str,
+        temperature: float = 0.1,
+        max_tokens: int = 512,
+    ):
+        """
+        Same request as generate(), but with stream=True. vLLM's
+        OpenAI-compatible server emits Server-Sent-Events lines like:
+
+            data: {"choices":[{"delta":{"content":"Hello"}, ...}]}
+            data: {"choices":[{"delta":{"content":" world"}, ...}]}
+            data: [DONE]
+
+        This yields just the text deltas, in order, as they arrive.
+        """
+        with self._session.post(
+            f"{self.host}/v1/chat/completions",
+            json={
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+            },
+            timeout=300,
+            stream=True,
+        ) as response:
+            response.raise_for_status()
+
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                decoded = line.decode("utf-8")
+
+                if not decoded.startswith("data: "):
+                    continue
+
+                data = decoded[len("data: "):].strip()
+
+                if data == "[DONE]":
+                    break
+
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    logger.warning(f"Skipping malformed stream chunk: {data!r}")
+                    continue
+
+                delta = (
+                    chunk.get("choices", [{}])[0]
+                    .get("delta", {})
+                    .get("content")
+                )
+
+                if delta:
+                    yield delta
+
+
 class EmbeddingClient:
     """
     HTTP client for an OpenAI-compatible /v1/embeddings endpoint
@@ -161,3 +222,4 @@ class RerankerClient:
         )
         response.raise_for_status()
         return response.json()["results"]
+

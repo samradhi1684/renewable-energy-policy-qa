@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-
+from app.api.document import router as document_router
 from app.api.query import router as query_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.chats import router as chats_router
@@ -54,3 +54,5 @@ def health():
     
 
 app.include_router(chats_router)
+
+app.include_router(document_router)

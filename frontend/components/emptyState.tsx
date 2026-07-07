@@ -3,10 +3,17 @@ type Props = {
   onQuestionClick: (question: string) => void;
 };
 
+const MODEL_LABELS: Record<string, string> = {
+  dsire: "USA",
+  mnre: "India",
+};
+
 export default function EmptyState({
   selectedModel,
   onQuestionClick,
 }: Props) {
+  const badgeLabel = MODEL_LABELS[selectedModel] ?? selectedModel.toUpperCase();
+
   return (
     <div
       style={{
@@ -22,30 +29,30 @@ export default function EmptyState({
       {/* Model badge */}
       <div
         style={{
-          background: "#f0faf6",
-          border: "1px solid #c3e6d8",
+          background: "var(--primary-soft)",
+          border: "1px solid var(--primary-soft-border)",
           borderRadius: "20px",
           padding: "4px 14px",
           fontSize: "13px",
-          fontWeight: 600,
-          color: "#19c37d",
+          fontWeight: 700,
+          color: "var(--primary)",
           letterSpacing: "0.04em",
           textTransform: "uppercase",
         }}
       >
-        {selectedModel.toUpperCase()}
+        {badgeLabel}
       </div>
 
       <h1
         style={{
           fontSize: "28px",
-          fontWeight: 600,
+          fontWeight: 700,
           color: "var(--foreground)",
           margin: 0,
           textAlign: "center",
         }}
       >
-        Renewable Energy Policy QA
+        Renewable Energy Policy Assistant
       </h1>
 
       <p
@@ -58,7 +65,7 @@ export default function EmptyState({
           lineHeight: "1.6",
         }}
       >
-        Ask questions about renewable energy policies from DSIRE and MNRE documents.
+        Explore renewable energy policies, incentives, regulations, and programs from the United States and India.
       </p>
 
       {/* Suggestion chips */}
@@ -72,30 +79,43 @@ export default function EmptyState({
           maxWidth: "600px",
         }}
       >
-        {[
+        { [
           "Where are Park & Plug chargers installed?",
-          "Explain VW Mitigation Program",
-          "What are the total Beat the Peak savings?",
+          "Explain the VW Mitigation Program",
+          "What is the timeline for the SMUD - Commercial Fleet Pilot Program?",
           "When are Indiana off-peak charging hours?",
-        ].map((q) => (
-            <button
+        ]
+     .map((q) => (
+          <button
             key={q}
             onClick={() => onQuestionClick(q)}
             style={{
-                padding: "10px 16px",
-                borderRadius: "12px",
-                border: "1px solid var(--sidebar-border)",
-                background: "var(--sidebar-bg)",
-                cursor: "pointer",
-                fontSize: "13px",
-                color: "var(--foreground)",
-                transition: "background 0.15s",
-                textAlign: "left",
-                lineHeight: "1.4",
+              padding: "10px 16px",
+              borderRadius: "12px",
+              border: "1px solid var(--sidebar-border)",
+              background: "#fff",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "var(--foreground)",
+              transition: "border-color 0.15s, background 0.15s",
+              textAlign: "left",
+              lineHeight: "1.4",
             }}
-            >
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                "var(--primary)";
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "var(--primary-soft)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor =
+                "var(--sidebar-border)";
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "#fff";
+            }}
+          >
             {q}
-</button>
+          </button>
         ))}
       </div>
     </div>

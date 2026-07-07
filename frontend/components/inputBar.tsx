@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  useRef,
-  useEffect,
-  useState
-} from "react";
+import { useRef, useEffect, useState } from "react";
+import { Paperclip, Mic, Square, ArrowUp, FileText } from "lucide-react";
 
 type Props = {
   value: string;
@@ -12,17 +9,10 @@ type Props = {
   onSend: (question?: string) => void;
   loading?: boolean;
   selectedFile: File | null;
-  onFileSelect: (
-    file: File | null
-  ) => void;
-  webSearch: boolean;
-  onWebSearchChange: (
-    value: boolean
-  ) => void;
+  onFileSelect: (file: File | null) => void;
 };
 
-const BASE =
-  "http://127.0.0.1:8000";
+const BASE = "http://127.0.0.1:8000";
 
 export default function InputBar({
   value,
@@ -31,421 +21,229 @@ export default function InputBar({
   loading,
   selectedFile,
   onFileSelect,
-  webSearch,
-  onWebSearchChange,
 }: Props) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
-  const textareaRef =
-    useRef<HTMLTextAreaElement>(
-      null
-    );
-
-  const fileInputRef =
-    useRef<HTMLInputElement>(
-      null
-    );
-
-  const mediaRecorderRef =
-    useRef<MediaRecorder | null>(
-      null
-    );
-
-  const chunksRef =
-    useRef<Blob[]>([]);
-
-  const [
-    recording,
-    setRecording
-  ] = useState(false);
+  const [recording, setRecording] = useState(false);
 
   // Auto-grow textarea
   useEffect(() => {
-
-    const el =
-      textareaRef.current;
-
+    const el = textareaRef.current;
     if (!el) return;
 
-    el.style.height =
-      "auto";
-
-    el.style.height =
-      Math.min(
-        el.scrollHeight,
-        200
-      ) + "px";
-
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, [value]);
 
-  function handleKeyDown(
-    e: React.KeyboardEvent<
-      HTMLTextAreaElement
-    >
-  ) {
-
-    if (
-      e.key === "Enter" &&
-      !e.shiftKey
-    ) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSend();
     }
   }
 
   async function toggleRecording() {
-
     if (recording) {
-
       mediaRecorderRef.current?.stop();
       setRecording(false);
       return;
     }
 
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
 
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          audio: true
-        });
-
-      const recorder =
-        new MediaRecorder(
-          stream
-        );
-
-      mediaRecorderRef.current =
-        recorder;
-
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
-      recorder.ondataavailable =
-        (e) => {
-          chunksRef.current.push(
-            e.data
-          );
-        };
+      recorder.ondataavailable = (e) => {
+        chunksRef.current.push(e.data);
+      };
 
-      recorder.onstop =
-        async () => {
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("audio", blob, "audio.webm");
 
-          const blob =
-            new Blob(
-              chunksRef.current,
-              {
-                type:
-                  "audio/webm"
-              }
-            );
+        try {
+          const res = await fetch(`${BASE}/chats/transcribe`, {
+            method: "POST",
+            body: formData,
+          });
 
-          const formData =
-            new FormData();
-
-          formData.append(
-            "audio",
-            blob,
-            "audio.webm"
-          );
-
-          try {
-
-            const res =
-              await fetch(
-                `${BASE}/chats/transcribe`,
-                {
-                  method:
-                    "POST",
-                  body:
-                    formData
-                }
-              );
-
-            if (
-              !res.ok
-            ) {
-              throw new Error(
-                "Transcription failed"
-              );
-            }
-
-            const data =
-              await res.json();
-
-            onChange(
-              data.text || ""
-            );
-
-          } catch (err) {
-
-            console.error(
-              err
-            );
-
-            alert(
-              "Speech transcription failed"
-            );
+          if (!res.ok) {
+            throw new Error("Transcription failed");
           }
-        };
+
+          const data = await res.json();
+          onChange(data.text || "");
+        } catch (err) {
+          console.error(err);
+          alert("Speech transcription failed");
+        }
+      };
 
       recorder.start();
       setRecording(true);
-
     } catch (err) {
-
-      console.error(
-        err
-      );
-
-      alert(
-        "Microphone access denied"
-      );
+      console.error(err);
+      alert("Microphone access denied");
     }
   }
 
-  const canSend =
-    value.trim().length > 0 &&
-    !loading;
+  const canSend = value.trim().length > 0 && !loading;
 
   return (
-  <div
-    style={{
-      maxWidth: "760px",
-      margin: "0 auto",
-      width: "100%",
-    }}
-  >
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        marginBottom: 6,
+        maxWidth: "760px",
+        margin: "0 auto",
+        width: "100%",
       }}
     >
-      <label
+
+      <div
         style={{
-          fontSize: 13,
-          cursor: "pointer",
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: 10,
+          background: "var(--input-bg)",
+          border: "1px solid var(--input-border)",
+          borderRadius: "26px",
+          padding: "8px 10px",
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <input
-          type="checkbox"
-          checked={webSearch}
-          onChange={(e) =>
-            onWebSearchChange(
-              e.target.checked
-            )
-          }
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.md,.txt"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFileSelect(file);
+          }}
         />
-        🌐 Search Web
-      </label>
-    </div>
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        background:
-          "var(--input-bg)",
-        border:
-          "1px solid var(--input-border)",
-        borderRadius: "24px",
-        padding:
-          "10px 12px",
-        boxShadow:
-          "0 2px 10px rgba(0,0,0,0.04)",
-      }}
-    >
 
-
-
-<input
-  ref={fileInputRef}
-  type="file"
-  accept=".pdf,.md,.txt"
-  style={{ display: "none" }}
-  onChange={(e) => {
-    const file =
-      e.target.files?.[0];
-
-    if (file) {
-      console.log(
-        "Selected file:",
-        file.name
-      );
-
-      onFileSelect(file);
-    }
-  }}
-/>
-
-      <button
-        type="button"
-        onClick={() =>
-          fileInputRef.current?.click()
-        }
-        title="Attach document"
-        style={{
-          width: "34px",
-          height: "34px",
-          borderRadius: "50%",
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#777",
-          flexShrink: 0,
-        }}
-      >
-        📎
-      </button>
-
-      {selectedFile && (
-        <div
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          title="Attach document"
           style={{
-            fontSize: 12,
-            color: "#666",
-            marginLeft: 8,
+            width: "36px",
+            height: "36px",
+            borderRadius: "50%",
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--placeholder-text)",
+            flexShrink: 0,
           }}
         >
-          📄 {selectedFile.name}
-        </div>
-      )}
+          <Paperclip size={18} />
+        </button>
 
+        {selectedFile && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+              color: "var(--primary)",
+              background: "var(--primary-soft)",
+              borderRadius: "999px",
+              padding: "4px 10px",
+              maxWidth: 140,
+              overflow: "hidden",
+            }}
+          >
+            <FileText size={12} style={{ flexShrink: 0 }} />
+            <span
+              style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {selectedFile.name}
+            </span>
+          </div>
+        )}
 
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask about renewable energy policy..."
+          rows={1}
+          style={{
+            flex: 1,
+            resize: "none",
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            fontSize: 15,
+            color: "var(--foreground)",
+            lineHeight: 1.6,
+            maxHeight: 200,
+            overflowY: "auto",
+            fontFamily: "inherit",
+          }}
+        />
 
-      {/* TEXTAREA CENTER */}
-      <textarea
-        ref={
-          textareaRef
-        }
-        value={value}
-        onChange={(e) =>
-          onChange(
-            e.target.value
-          )
-        }
-        onKeyDown={
-          handleKeyDown
-        }
-        placeholder="Ask queries related to renewable energy policies..."
-        rows={1}
-        style={{
-          flex: 1,
-          resize: "none",
-          border: "none",
-          outline: "none",
-          background:
-            "transparent",
-          fontSize: 15,
-          color:
-            "var(--foreground)",
-          lineHeight: 1.6,
-          maxHeight: 200,
-          overflowY: "auto",
-          fontFamily:
-            "inherit",
-        }}
-      />
-
-      {/* MIC RIGHT */}
-      <button
-        onClick={
-          toggleRecording
-        }
-        title={
-          recording
-            ? "Stop recording"
-            : "Voice input"
-        }
-        style={{
-          width: "34px",
-          height: "34px",
-          borderRadius: "50%",
-          border: "none",
-          background:
-            recording
-              ? "#ef4444"
-              : "transparent",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color:
-            recording
-              ? "#fff"
-              : "#777",
-          flexShrink: 0,
-        }}
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <button
+          onClick={toggleRecording}
+          title={recording ? "Stop recording" : "Voice input"}
+          style={{
+            width: "36px",
+            height: "36px",
+            borderRadius: "50%",
+            border: "none",
+            background: recording ? "#ef4444" : "transparent",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: recording ? "#fff" : "var(--placeholder-text)",
+            flexShrink: 0,
+            transition: "background 0.15s",
+          }}
         >
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-          <line
-            x1="12"
-            x2="12"
-            y1="19"
-            y2="22"
-          />
-        </svg>
-      </button>
+          {recording ? <Square size={16} fill="currentColor" /> : <Mic size={18} />}
+        </button>
 
-      {/*SEND RIGHT */}
-      <button
-        onClick={() => onSend()}
-        disabled={!canSend}
-        title="Send"
-        style={{
-          width: "34px",
-          height: "34px",
-          borderRadius: "50%",
-          border: "none",
-         background:
-          canSend
-            ? "#111827"
-            : "#e5e7eb",
-          cursor:
-            canSend
-              ? "pointer"
-              : "not-allowed",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#fff",
-          flexShrink: 0,
-          transition:
-            "all 0.15s",
-        }}
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <button
+          onClick={() => onSend()}
+          disabled={!canSend}
+          title="Send"
+          style={{
+            width: "36px",
+            height: "36px",
+            borderRadius: "50%",
+            border: "none",
+            background: canSend ? "var(--send-btn-bg)" : "#e5e3f6",
+            cursor: canSend ? "pointer" : "not-allowed",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: canSend ? "var(--send-btn-text)" : "#a9a5d9",
+            flexShrink: 0,
+            transition: "all 0.15s",
+          }}
         >
-          <path d="M22 2L11 13" />
-          <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-        </svg>
-      </button>
-
+          <ArrowUp size={18} strokeWidth={2.4} />
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
 }

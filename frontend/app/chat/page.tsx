@@ -11,9 +11,8 @@ import SourcePane from "../../components/sourcePane";
 import {
   createChat,
   listChats,
-  getChat,
   getMessages,
-  queryInChat,
+  queryInChatStream,
   regenerateAnswer,
   deleteChat,
   renameChat,
@@ -44,7 +43,7 @@ export default function Home() {
     useState(true);
 
   const [selectedModel, setSelectedModel] =
-    useState("dsire");
+    useState("usa");
 
   const [chats, setChats] =
     useState<Chat[]>([]);
@@ -55,15 +54,6 @@ export default function Home() {
   const [activeMessages, setActiveMessages] =
     useState<Message[]>([]);
 
-  const [webSearch, setWebSearch] =
-  useState(false);
-
-  useEffect(() => {
-  console.log(
-    "webSearch state:",
-    webSearch
-  );
-}, [webSearch]);
 
   const [
     sourcePaneSources,
@@ -77,27 +67,45 @@ export default function Home() {
     setSourcePaneIndex
   ] = useState(0);
 
-  useEffect(() => {
+  
+    useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+        setChats([]);
+        return;
+    }
+
     listChats()
-      .then(setChats)
-      .catch(() => {});
-  }, []);
+        .then(setChats)
+        .catch(() => {});
+    }, []);
 
 
 
-  async function handleNewChat() {
+  
+    async function handleNewChat() {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+        setActiveChatId("guest");
+        setActiveMessages([]);
+        setSourcePaneSources(null);
+        return;
+    }
+
     const chat = await createChat();
 
     setChats((prev) => [
-      chat,
-      ...prev,
+        chat,
+        ...prev,
     ]);
 
     setActiveChatId(chat.id);
 
     setActiveMessages([]);
     setSourcePaneSources(null);
-  }
+    }
 
 
   async function handleSelectChat(id: string) {
@@ -329,24 +337,30 @@ export default function Home() {
         let chatId =
           activeChatId;
 
+        
         if (!chatId) {
 
-          const chat =
-            await createChat();
+        const token = localStorage.getItem("token");
 
-          setChats(
-            (prev) => [
-              chat,
-              ...prev,
-            ]
-          );
+        if (token) {
 
-          setActiveChatId(
-            chat.id
-          );
+            const chat = await createChat();
 
-          chatId =
-            chat.id;
+            setChats((prev) => [
+            chat,
+            ...prev,
+            ]);
+
+            setActiveChatId(chat.id);
+
+            chatId = chat.id;
+
+        } else {
+
+            chatId = "guest";
+            setActiveChatId(chatId);
+
+        }
         }
 
 
@@ -362,99 +376,155 @@ export default function Home() {
           ]
         );
 
-        try {
+        // File-upload mode still uses the non-streaming /query endpoint
+        // (see lib/api.ts: queryInChat) since the backend only streams the
+        // plain-RAG path today. Everything below is the plain-RAG,
+        // token-by-token streaming path.
+        if (selectedFile) {
+          const { queryInChat } = await import("../../lib/api");
 
-          console.log(
-            "QUESTION SENT:",
-            currentQuestion
-          );
+          setActiveMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: "",
+              thinking: true,
+              created_at: new Date().toISOString(),
+            },
+          ]);
 
-          console.log(
-            "WEB SEARCH:",
-            webSearch
-          );
-
-          const response =
-            await queryInChat(
+          try {
+            const response = await queryInChat(
               chatId,
               currentQuestion,
-              selectedFile || undefined,
-              webSearch
+              selectedFile,
             );
 
-          console.log("FULL RESPONSE:", response);
-          console.log("DOWNLOAD URL:", response.download_url);
-          console.log("DOWNLOAD TYPE:", response.download_type);
+            setActiveMessages((prev) => {
+              const next = [...prev];
+              next[next.length - 1] = {
+                role: "assistant",
+                content: response.answer,
+                sources: response.sources,
+                created_at: new Date().toISOString(),
+                download_url: response.download_url,
+                download_type: response.download_type,
+              };
+              return next;
+            });
 
-          const combinedSources: Source[] = [
-            ...(response.sources || []),
+            const updatedChats = await listChats();
+            setChats(updatedChats);
+          } catch {
+            setActiveMessages((prev) => {
+              const next = [...prev];
+              next[next.length - 1] = {
+                role: "assistant",
+                content: "Sorry, something went wrong.",
+                created_at: new Date().toISOString(),
+              };
+              return next;
+            });
+          } finally {
+            setLoading(false);
+          }
 
-            ...((response.web_sources || []).map(
-              (w: any, idx: number) => ({
-                chunk_id: `web-${idx}`,
-                document_id: w.title,
-                chunk_text: w.content,
+          return;
+        }
 
-                token_start: 0,
-                token_end: 0,
+        // Push a placeholder assistant message that starts in "thinking"
+        // state (dots, no text). As SSE events arrive it flips out of
+        // thinking and its content grows token by token.
+        setActiveMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "",
+            thinking: true,
+            created_at: new Date().toISOString(),
+          },
+        ]);
 
-                evidence: w.url,
-                score: 1,
+        try {
 
-                highlight_spans: [],
-
-                is_web: true,
-              } as Source))
-            ),
-          ];
-
-          console.log(
-            "DOWNLOAD URL RECEIVED:",
-            response.download_url
-          );
-
-          setActiveMessages(
-            (prev) => [
-              ...prev,
-              {
-                role:
-                  "assistant",
-                content:
-                  response.answer,
-                sources:
-                  combinedSources,
-                created_at:
-                  new Date().toISOString(),
-
-                download_url:
-                  response.download_url,
-
-                download_type:
-                  response.download_type,
+          await queryInChatStream(
+            chatId,
+            currentQuestion,
+            {
+              onThinking: () => {
+                // Already showing the thinking placeholder from above;
+                // nothing to do, but kept as an explicit hook in case the
+                // UI wants a distinct "retrieving sources" label later.
               },
-            ]
+
+              onToken: (token) => {
+                setActiveMessages((prev) => {
+                  const next = [...prev];
+                  const last = next[next.length - 1];
+
+                  if (!last || last.role !== "assistant") return prev;
+
+                  next[next.length - 1] = {
+                    ...last,
+                    thinking: false,
+                    content: last.content + token,
+                  };
+
+                  return next;
+                });
+              },
+
+              onDone: ({ sources }) => {
+                setActiveMessages((prev) => {
+                  const next = [...prev];
+                  const last = next[next.length - 1];
+
+                  if (!last || last.role !== "assistant") return prev;
+
+                  next[next.length - 1] = {
+                    ...last,
+                    thinking: false,
+                    sources,
+                  };
+
+                  return next;
+                });
+              },
+            }
           );
 
-          const updatedChats =
-            await listChats();
-
-          setChats(updatedChats);
+          
+            if (localStorage.getItem("token")) {
+                const updatedChats = await listChats();
+                setChats(updatedChats);
+            }
 
         } catch {
 
-          setActiveMessages(
-            (prev) => [
+          setActiveMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+
+            // Replace the (still empty/thinking) placeholder with an
+            // error message rather than appending a new one.
+            if (last && last.role === "assistant" && last.thinking) {
+              next[next.length - 1] = {
+                role: "assistant",
+                content: "Sorry, something went wrong.",
+                created_at: new Date().toISOString(),
+              };
+              return next;
+            }
+
+            return [
               ...prev,
               {
-                role:
-                  "assistant",
-                content:
-                  "Sorry, something went wrong.",
-                created_at:
-                    new Date().toISOString(),
+                role: "assistant",
+                content: "Sorry, something went wrong.",
+                created_at: new Date().toISOString(),
               },
-            ]
-          );
+            ];
+          });
 
         } finally {
           setLoading(false);
@@ -464,7 +534,6 @@ export default function Home() {
         question,
         loading,
         activeChatId,
-        webSearch,
       ]
     );
 
@@ -579,15 +648,8 @@ export default function Home() {
             loading={loading}
             selectedFile={selectedFile}
             onFileSelect={setSelectedFile}
-            webSearch={webSearch}
-            onWebSearchChange={(value) => {
-              console.log(
-                "checkbox changed:",
-                value
-              );
-
-              setWebSearch(value);
-            }}
+  
+            
           />
         </div>
       </div>

@@ -7,11 +7,14 @@ import FormField from "../../components/formField";
 import RoleSelector from "../../components/roleSelector";
 
 const DEFAULT_ROLE = "Citizen";
+const API_URL = "http://127.0.0.1:8000";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [role, setRole] = useState(DEFAULT_ROLE);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Pre-fill the name if it was captured on the signup screen.
   useEffect(() => {
@@ -19,10 +22,44 @@ export default function OnboardingPage() {
     if (savedName) setName(savedName);
   }, []);
 
-  function handleContinue() {
-    window.localStorage.setItem("policylens_user_name", name.trim() || "Guest");
-    window.localStorage.setItem("policylens_user_role", role);
-    router.push("/chat");
+  async function handleContinue() {
+    const token = window.localStorage.getItem("token");
+
+    if (!token) {
+      // Shouldn't happen in the normal signup -> onboarding flow, but
+      // guards against someone landing here without a session.
+      router.push("/signin");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${API_URL}/auth/onboarding`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          display_name: name.trim() || "Guest",
+          role,
+        }),
+      });
+
+      if (!res.ok) {
+        setError("Could not save your details. Please try again.");
+        return;
+      }
+
+      window.localStorage.removeItem("policylens_user_name");
+      router.push("/chat");
+    } catch {
+      setError("Could not reach the server. Is the backend running?");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -43,6 +80,10 @@ export default function OnboardingPage() {
 
         <FormField label="Your name" placeholder="Your name" value={name} onChange={setName} />
 
+        {error && (
+          <p style={{ fontSize: "13px", color: "#e5484d", margin: "8px 0 0" }}>{error}</p>
+        )}
+
         <div style={{ marginTop: "8px", marginBottom: "24px" }}>
           <p style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--placeholder-text)", margin: "0 0 10px" }}>
             Your Role
@@ -53,6 +94,7 @@ export default function OnboardingPage() {
         <button
           type="button"
           onClick={handleContinue}
+          disabled={submitting}
           style={{
             width: "100%",
             padding: "13px 16px",
@@ -62,13 +104,14 @@ export default function OnboardingPage() {
             color: "#ffffff",
             fontSize: "15px",
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting ? "default" : "pointer",
+            opacity: submitting ? 0.7 : 1,
             transition: "background 0.15s",
           }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary-hover)")}
           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary)")}
         >
-          Continue
+          {submitting ? "Saving..." : "Continue"}
         </button>
       </div>
     </AuthLayout>

@@ -20,7 +20,10 @@ from app.dependencies import get_db
 from fastapi import Depends
 from app.services.title_service import generate_title
 
-from app.dependencies import get_current_user
+from app.dependencies import (
+    get_current_user,
+    get_optional_current_user,
+)
 from app.models.user import User
 
 from app.services.chat_service import (
@@ -30,6 +33,7 @@ from app.services.chat_service import (
     delete_chat,
     rename_chat,
     search_chats,
+    pin_chat,
 )
 
 import uuid
@@ -55,9 +59,6 @@ from app.services.document_retriever import (
     retrieve_chunks,
 )
 
-from storage.chat_store import (
-    pin_chat,
-)
 
 from app.services.message_service import (
     create_message,
@@ -73,6 +74,10 @@ from fastapi.responses import (
 
 from reportlab.pdfgen import canvas
 from io import BytesIO
+
+import json
+from fastapi.responses import StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 
 
 router = APIRouter(
@@ -168,28 +173,35 @@ async def query_in_chat(
     question: str = Form(...),
     file: UploadFile | None = File(None),
     web_search: bool = Form(False),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    chat = await get_chat(
-        db,
-        chat_id,
-        str(current_user.id),
-    )
+    chat = None
 
-    if not chat:
-        raise HTTPException(
-            status_code=404,
-            detail="Chat not found",
+    if current_user:
+        chat = await get_chat(
+            db,
+            chat_id,
+            str(current_user.id),
         )
+
+        if not chat:
+            raise HTTPException(
+                status_code=404,
+                detail="Chat not found",
+            )
     print(
         "WEB SEARCH RECEIVED:",
         web_search
     )
-    history = await get_recent_messages(
-    db,
-    chat_id,
-    )
+
+    history = []
+
+    if current_user:
+        history = await get_recent_messages(
+            db,
+            chat_id,
+        )
 
     #
     # DOCUMENT MODE
@@ -289,12 +301,14 @@ async def query_in_chat(
                     web_search=web_search,
                 )
 
-    await create_message(
-        db,
-        chat_id,
-        "user",
-        question,
-    )
+    
+    if current_user:
+        await create_message(
+            db,
+            chat_id,
+            "user",
+            question,
+        )
 
     download_url = None
 
@@ -337,7 +351,7 @@ async def query_in_chat(
             f"http://127.0.0.1:8000/downloads/{filename}"
         )
 
-    if chat.title == "New Chat":
+    if current_user and chat and chat.title == "New Chat":
 
         try:
 
@@ -359,17 +373,19 @@ async def query_in_chat(
                 e
             )
 
-    await create_message(
-        db,
-        chat_id,
-        "assistant",
-        result["answer"],
-    )
+    
+    if current_user:
+        await create_message(
+            db,
+            chat_id,
+            "assistant",
+            result["answer"],
+        )
 
     #
     # AUTO TITLE GENERATION
     #
-    if chat.title == "New Chat":
+    if current_user and chat and chat.title == "New Chat":
 
         title = generate_title(
             question,
@@ -402,6 +418,116 @@ async def query_in_chat(
     result["file_message"] = preview
 
     return result
+
+
+@router.post("/{chat_id}/query/stream")
+async def query_in_chat_stream(
+    chat_id: str,
+    question: str = Form(...),
+    web_search: bool = Form(False),
+    current_user: User | None = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Server-Sent-Events version of /{chat_id}/query for the plain RAG
+    (no file upload) path. Emits, in order:
+
+      data: {"status": "thinking"}                         -> retrieval/rerank in progress
+      data: {"token": "..."}                                -> repeated, one per token
+      data: {"done": true, "sources": [...], "title": "..."} -> final event
+
+    Document-upload mode still goes through the non-streaming /query
+    endpoint above.
+    """
+
+    chat = None
+
+    if current_user:
+        chat = await get_chat(
+            db,
+            chat_id,
+            str(current_user.id),
+        )
+
+        if not chat:
+            raise HTTPException(
+                status_code=404,
+                detail="Chat not found",
+            )
+    
+    if current_user:
+        await create_message(
+            db,
+            chat_id,
+            "user",
+            question,
+        )
+
+    
+    is_new_chat = (
+        current_user
+        and chat is not None
+        and chat.title == "New Chat"
+    )
+
+    async def event_stream():
+        # Tell the frontend generation has started so it can show a
+        # "Thinking..." state immediately, before retrieval/rerank finishes.
+        yield f"data: {json.dumps({'status': 'thinking'})}\n\n"
+
+        # Retrieval + rerank + prompt-building is CPU/GPU/network bound and
+        # synchronous, so it's run off the event loop in a thread.
+        prompt, sources, fallback = await run_in_threadpool(
+            pipeline.prepare_for_stream,
+            question,
+        )
+
+        full_answer = ""
+
+        if fallback is not None:
+            full_answer = fallback
+            yield f"data: {json.dumps({'token': fallback})}\n\n"
+        else:
+            for token in pipeline.stream_answer(prompt):
+                full_answer += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
+        
+        if current_user:
+            await create_message(
+                db,
+                chat_id,
+                "assistant",
+                full_answer,
+            )
+
+        title = None
+
+        if is_new_chat:
+            try:
+                title = generate_title(question, full_answer)
+                await rename_chat(
+                    db,
+                    chat_id,
+                    str(current_user.id),
+                    title,
+                )
+            except Exception as e:
+                print("Title generation failed:", e)
+
+        yield (
+            "data: "
+            + json.dumps({"done": True, "sources": sources, "title": title})
+            + "\n\n"
+        )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering if you're behind one
+        },
+    )
 
 
 @router.get("/{chat_id}/messages")
@@ -518,13 +644,16 @@ async def rename(
 
 
 @router.patch("/{chat_id}/pin")
-def pin(
+async def pin(
     chat_id: str,
     body: PinBody,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    chat = pin_chat(
+    chat = await pin_chat(
+        db,
         chat_id,
+        str(current_user.id),
         body.pinned,
     )
 

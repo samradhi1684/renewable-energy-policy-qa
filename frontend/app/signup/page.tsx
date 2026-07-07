@@ -4,16 +4,21 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthLayout from "../../components/authLayout";
 import FormField from "../../components/formField";
-import GoogleButton from "../../components/googleButton";
+
+import { useAuth } from "../../context/AuthContext";
+
+const API_URL = "http://127.0.0.1:8000";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleCreateAccount(e: React.FormEvent) {
+  async function handleCreateAccount(e: React.FormEvent) {
     e.preventDefault();
 
     if (!name.trim() || !email.trim() || !password.trim()) {
@@ -21,13 +26,39 @@ export default function SignUpPage() {
       return;
     }
 
-    // No auth backend exists yet — store locally so onboarding/chat can
-    // read it, and move on. Replace with a real signup call once an
-    // auth API is available.
-    window.localStorage.setItem("policylens_user_name", name.trim());
-    window.localStorage.setItem("policylens_user_email", email.trim());
+    setError(null);
+    setSubmitting(true);
 
-    router.push("/onboarding");
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          username: name.trim(),
+          password,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        setError(err?.detail || "Could not create your account.");
+        return;
+      }
+
+      const data = await res.json();
+      await login(data.access_token);
+
+      // Name is passed along so the onboarding screen can pre-fill it,
+      // but the source of truth is now the DB, saved via PATCH /auth/onboarding.
+      window.localStorage.setItem("policylens_user_name", name.trim());
+
+      router.push("/onboarding");
+    } catch {
+      setError("Could not reach the server. Is the backend running?");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -54,6 +85,7 @@ export default function SignUpPage() {
 
         <button
           type="submit"
+          disabled={submitting}
           style={{
             width: "100%",
             padding: "13px 16px",
@@ -63,23 +95,19 @@ export default function SignUpPage() {
             color: "#ffffff",
             fontSize: "15px",
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting ? "default" : "pointer",
+            opacity: submitting ? 0.7 : 1,
             marginTop: "4px",
             transition: "background 0.15s",
           }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary-hover)")}
           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary)")}
         >
-          Create Account
+          {submitting ? "Creating Account..." : "Create Account"}
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "20px 0" }}>
-          <div style={{ flex: 1, height: "1px", background: "var(--input-border)" }} />
-          <span style={{ fontSize: "12px", color: "var(--placeholder-text)" }}>or</span>
-          <div style={{ flex: 1, height: "1px", background: "var(--input-border)" }} />
-        </div>
 
-        <GoogleButton onClick={() => router.push("/onboarding")} />
+
 
         <p style={{ textAlign: "center", fontSize: "13px", color: "var(--placeholder-text)", marginTop: "20px" }}>
           Already have an account?{" "}

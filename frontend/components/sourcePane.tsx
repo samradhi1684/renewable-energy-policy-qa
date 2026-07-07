@@ -1,6 +1,17 @@
 "use client";
 
-import type { Source } from "../lib/api";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  fetchDocument,
+  type Source,
+} from "../lib/api";
+import DocumentViewer from "./documentViewer";
+import { X, FileText, Globe, ExternalLink, ChevronDown } from "lucide-react";
 
 type Props = {
   sources: Source[];
@@ -9,38 +20,222 @@ type Props = {
   onClose: () => void;
 };
 
+type Category = "all" | "docs" | "web";
+
+const PAGE_SIZE = 4;
+
+// How many cards to show before the "View N more" button, for a given
+// (already category-filtered) list. Prefer showing exactly the sources the
+// model cited; fall back to PAGE_SIZE if none were marked "used" (e.g. an
+// older cached response, or a category with no cited sources in it).
+function defaultVisibleCount(list: Source[]): number {
+  const used = list.filter((s) => s.used).length;
+  return used > 0 ? used : Math.min(PAGE_SIZE, list.length);
+}
+
 export default function SourcePane({
   sources,
   activeIndex,
   onSelectSource,
   onClose,
 }: Props) {
-  const active = sources[activeIndex];
+  const [category, setCategory] = useState<Category>("all");
+  const [visibleCount, setVisibleCount] = useState(() =>
+    defaultVisibleCount(sources)
+  );
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(
+    activeIndex ?? null
+  );
+
+  const [documents, setDocuments] = useState<
+    Record<string, string>
+  >({});
+
+  const [panelWidth, setPanelWidth] = useState(520);
+
+  const resizing = useRef(false);
+
+  const filtered = useMemo(() => {
+    if (category === "all") return sources;
+    if (category === "web") return sources.filter((s) => (s as any).is_web);
+    return sources.filter((s) => !(s as any).is_web);
+  }, [sources, category]);
+
+  function selectCategory(next: Category, nextList: Source[]) {
+    setCategory(next);
+    setVisibleCount(defaultVisibleCount(nextList));
+  }
+
+  const visible = filtered.slice(0, visibleCount);
+  const remaining = filtered.length - visible.length;
+
+  function handleToggle(index: number, sourceGlobalIndex: number) {
+    setExpandedIndex((prev) => (prev === index ? null : index));
+    onSelectSource(sourceGlobalIndex);
+  }
+
+
+  useEffect(() => {
+    if (expandedIndex === null) return;
+
+    const src = sources[expandedIndex];
+
+    if (!src) return;
+
+    if ((src as any).is_web) return;
+
+    if (documents[src.document_id]) return;
+
+    fetchDocument(src.document_id)
+      .then((markdown) => {
+        setDocuments((prev) => ({
+          ...prev,
+          [src.document_id]: markdown,
+        }));
+      })
+      .catch(console.error);
+  }, [expandedIndex, sources, documents]);
+
+
+  useEffect(() => {
+  function onMouseMove(e: MouseEvent) {
+    if (!resizing.current) return;
+
+    const width = window.innerWidth - e.clientX;
+
+    setPanelWidth(
+      Math.max(
+        420,
+        Math.min(1100, width)
+      )
+    );
+  }
+
+  function onMouseUp() {
+    resizing.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }
+
+  window.addEventListener(
+    "mousemove",
+    onMouseMove
+  );
+
+  window.addEventListener(
+    "mouseup",
+    onMouseUp
+  );
+
+  return () => {
+    window.removeEventListener(
+      "mousemove",
+      onMouseMove
+    );
+
+    window.removeEventListener(
+      "mouseup",
+      onMouseUp
+    );
+  };
+  }, []);
+
+  function sourcesToText(): string {
+    return sources
+      .map((s, i) => {
+        const title = s.document_id.replace(/_/g, " ");
+        const desc = (s as any).is_web ? s.chunk_text : s.evidence;
+        const link = (s as any).is_web ? s.evidence : "";
+        return `${i + 1}. ${title}\n${desc || ""}${link ? `\n${link}` : ""}\n`;
+      })
+      .join("\n");
+  }
+
+  function exportTxt() {
+    downloadBlob(sourcesToText(), "sources.txt", "text/plain");
+  }
+
+  function exportMarkdown() {
+    const md = sources
+      .map((s, i) => {
+        const title = s.document_id.replace(/_/g, " ");
+        const desc = (s as any).is_web ? s.chunk_text : s.evidence;
+        const link = (s as any).is_web ? s.evidence : "";
+        return `**${i + 1}. ${title}**\n\n${desc || ""}${
+          link ? `\n\n[Open source](${link})` : ""
+        }\n`;
+      })
+      .join("\n---\n\n");
+    downloadBlob(md, "sources.md", "text/markdown");
+  }
+
+  function exportPdf() {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const rows = sources
+      .map((s, i) => {
+        const title = s.document_id.replace(/_/g, " ");
+        const desc = (s as any).is_web ? s.chunk_text : s.evidence;
+        return `<h3>${i + 1}. ${escapeHtml(title)}</h3><p>${escapeHtml(
+          desc || ""
+        )}</p>`;
+      })
+      .join("<hr/>");
+    win.document.write(
+      `<html><head><title>Sources</title></head><body>${rows}</body></html>`
+    );
+    win.document.close();
+    win.focus();
+    win.print();
+  }
 
   return (
     <div
       style={{
-        width: 360,
+        width: panelWidth,
+        position: "relative",
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
         borderLeft: "1px solid var(--sidebar-border)",
-        background: "var(--sidebar-bg)",
+        background: "var(--sources-bg)",
         overflow: "hidden",
       }}
     >
+
+    <div
+      onMouseDown={() => {
+        resizing.current = true;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+      }}
+      onDoubleClick={() => setPanelWidth(520)}
+      style={{
+        position: "absolute",
+        left: -5,
+        top: 0,
+        bottom: 0,
+        width: 10,
+        cursor: "col-resize",
+        zIndex: 100,
+        background: "#e5e7eb",
+      }}
+    />
+
+
       {/* Header */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "14px 16px 12px",
-          borderBottom: "1px solid var(--sidebar-border)",
+          padding: "16px 18px 12px",
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>
+        <span
+          style={{ fontSize: 18, fontWeight: 700, color: "var(--primary)" }}
+        >
           Sources ({sources.length})
         </span>
         <button
@@ -51,143 +246,360 @@ export default function SourcePane({
             border: "none",
             cursor: "pointer",
             color: "var(--placeholder-text)",
-            padding: "2px 6px",
-            borderRadius: 6,
-            fontSize: 16,
-            lineHeight: 1,
+            padding: "4px",
+            borderRadius: 8,
+            display: "flex",
           }}
         >
-          ✕
+          <X size={18} />
         </button>
       </div>
 
-      {/* Source tabs */}
+      {/* Category tabs */}
       <div
         style={{
           display: "flex",
-          gap: 6,
-          padding: "10px 12px",
-          borderBottom: "1px solid var(--sidebar-border)",
+          flexWrap: "wrap",
+          gap: 8,
+          padding: "0 18px 14px",
           flexShrink: 0,
-          overflowX: "auto",
-          scrollbarWidth: "none",
         }}
       >
-        {sources.map((src, i) => (
-          <button
-            key={src.chunk_id}
-            onClick={() => onSelectSource(i)}
-            title={src.document_id}
-            style={{
-              flexShrink: 0,
-              padding: "4px 10px",
-              borderRadius: 20,
-              border: "1px solid",
-              borderColor: i === activeIndex ? "var(--accent)" : "var(--sidebar-border)",
-              background: i === activeIndex ? "var(--accent)" : "transparent",
-              color: i === activeIndex ? "#fff" : "var(--foreground)",
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: "pointer",
-              transition: "all 0.15s",
-              whiteSpace: "nowrap",
-              maxWidth: 130,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {i + 1}. {src.document_id.replace(/_/g, " ")}
-          </button>
-        ))}
+        <TabPill
+          active={category === "all"}
+          label="All"
+          onClick={() => selectCategory("all", sources)}
+        />
+        <TabPill
+          active={category === "docs"}
+          label="Documents"
+          icon={<FileText size={13} />}
+          onClick={() =>
+            selectCategory(
+              "docs",
+              sources.filter((s) => !(s as any).is_web)
+            )
+          }
+        />
+        <TabPill
+          active={category === "web"}
+          label="Web Links"
+          icon={<Globe size={13} />}
+          onClick={() =>
+            selectCategory(
+              "web",
+              sources.filter((s) => (s as any).is_web)
+            )
+          }
+        />
       </div>
 
-      {/* Active source */}
-      {active && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+      {/* Source list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 14px" }}>
+        {visible.map((src) => {
+          const globalIndex = sources.indexOf(src);
+          const isWeb = Boolean((src as any).is_web);
+          const isExpanded = expandedIndex === globalIndex;
+          const description = isWeb ? src.chunk_text : src.evidence;
 
-          {/* Doc name + score */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 8,
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", marginBottom: 2 }}>
-                {active.document_id.replace(/_/g, " ")}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--placeholder-text)" }}>
-                Tokens {active.token_start}–{active.token_end}
-              </div>
-            </div>
-            <ScoreBadge score={active.score} />
-          </div>
-          {(active as any).is_web && (
-          <div
-            style={{
-              display: "inline-block",
-              padding: "4px 8px",
-              borderRadius: "6px",
-              background: "#e0f2fe",
-              fontSize: "12px",
-              fontWeight: 600,
-              marginBottom: "10px",
-            }}
-          >
-            🌐 Web Source
-          </div>
-        )}
-
-        {(active as any).is_web &&
-          active.evidence && (
+          return (
             <div
+              key={src.chunk_id}
               style={{
-                marginBottom: "12px",
+                border: "1px solid var(--sidebar-border)",
+                borderRadius: 14,
+                padding: "14px 14px",
+                marginBottom: 10,
+                background: "#fff",
+                cursor: "pointer",
               }}
+              onClick={() => handleToggle(globalIndex, globalIndex)}
             >
-              <a
-                href={active.evidence}
-                target="_blank"
-                rel="noreferrer"
+              <div
                 style={{
-                  fontSize: "13px",
-                  color: "#2563eb",
-                  textDecoration: "none",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 8,
                 }}
               >
-                Open Website →
-              </a>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: "var(--foreground)",
+                      }}
+                    >
+                      {src.document_id.replace(/_/g, " ")}
+                    </span>
+
+                    <TypeBadge isWeb={isWeb} />
+                    <ScoreBadge score={src.score} />
+                    {src.used && <UsedBadge />}
+                  </div>
+
+                  {description && (
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        color: "var(--placeholder-text)",
+                        marginTop: 4,
+                        lineHeight: 1.5,
+                        display: "-webkit-box",
+                        WebkitLineClamp: isExpanded ? undefined : 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: isExpanded ? "visible" : "hidden",
+                      }}
+                    >
+                      {description}
+                    </div>
+                  )}
+                </div>
+
+                {isWeb ? (
+                  <a
+                    href={src.evidence}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      flexShrink: 0,
+                      color: "var(--primary)",
+                      display: "flex",
+                      padding: 4,
+                    }}
+                  >
+                    <ExternalLink size={16} />
+                  </a>
+                ) : (
+                  <ChevronDown
+                    size={16}
+                    style={{
+                      flexShrink: 0,
+                      color: "var(--placeholder-text)",
+                      transform: isExpanded
+                        ? "rotate(180deg)"
+                        : "rotate(0deg)",
+                      transition: "transform .15s",
+                    }}
+                  />
+                )}
+              </div>
+
+              {isExpanded && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: "1px solid var(--sidebar-border)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--placeholder-text)",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Tokens {src.token_start}–{src.token_end}
+                  </div>
+
+                  <DocumentViewer
+                    markdown={
+                      documents[src.document_id] ??
+                      "# Loading document..."
+                    }
+                    highlightedChunk={src.chunk_text}
+                  />
+                </div>
+              )}
             </div>
-        )}
-          {/* Full chunk — evidence sentences highlighted */}
-          <div
+          );
+        })}
+
+        {remaining > 0 && (
+          <button
+            onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
             style={{
-              fontSize: 12,
-              lineHeight: 1.8,
-              color: "var(--foreground)",
-              background: "var(--background)",
-              borderRadius: 8,
-              padding: "12px 14px",
-              border: "1px solid var(--sidebar-border)",
+              width: "100%",
+              padding: "10px",
+              borderRadius: 12,
+              border: "none",
+              background: "var(--primary-soft)",
+              color: "var(--primary)",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              marginBottom: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
             }}
-            dangerouslySetInnerHTML={{
-            // __html: buildHighlightedChunk(
-            //   active.chunk_text,
-            //   active.highlight_start,
-            //   active.highlight_end
-            // ),
-            __html: buildHighlightedChunk(
-            active.chunk_text,
-            active.highlight_spans ?? []
-          )
-          }}
-          />
-        </div>
-      )}
+          >
+            View {remaining} more source{remaining > 1 ? "s" : ""} →
+          </button>
+        )}
+      </div>
+
+      {/* Footer export */}
+      <div
+        style={{
+          borderTop: "1px solid var(--sidebar-border)",
+          padding: "12px 18px",
+          fontSize: 12,
+          color: "var(--placeholder-text)",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexShrink: 0,
+        }}
+      >
+        <span>Export sources as:</span>
+        <button onClick={exportPdf} style={exportLinkStyle}>
+          PDF
+        </button>
+        ·
+        <button onClick={exportMarkdown} style={exportLinkStyle}>
+          Markdown
+        </button>
+        ·
+        <button onClick={exportTxt} style={exportLinkStyle}>
+          TXT
+        </button>
+      </div>
     </div>
+  );
+}
+
+const exportLinkStyle: React.CSSProperties = {
+  border: "none",
+  background: "none",
+  color: "var(--primary)",
+  fontWeight: 600,
+  fontSize: 12,
+  cursor: "pointer",
+  padding: 0,
+};
+
+function downloadBlob(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ── Tab pill ───────────────────────────────────────────────────────────────
+
+function TabPill({
+  active,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "7px 14px",
+        borderRadius: 999,
+        border: `1px solid ${active ? "var(--primary)" : "var(--sidebar-border)"}`,
+        background: active ? "var(--primary)" : "transparent",
+        color: active ? "#fff" : "var(--foreground)",
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: "pointer",
+        transition: "all 0.15s",
+      }}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+// ── Type / score badges ──────────────────────────────────────────────────────
+
+function TypeBadge({ isWeb }: { isWeb: boolean }) {
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: "0.03em",
+        padding: "2px 7px",
+        borderRadius: 6,
+        background: isWeb ? "var(--badge-web-bg)" : "var(--badge-guide-bg)",
+        color: isWeb ? "var(--badge-web-text)" : "var(--badge-guide-text)",
+      }}
+    >
+      {isWeb ? "WEB" : "DOC"}
+    </span>
+  );
+}
+
+function UsedBadge() {
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: "0.03em",
+        padding: "2px 7px",
+        borderRadius: 6,
+        background: "var(--primary-soft)",
+        color: "var(--primary)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      ✓ USED
+    </span>
+  );
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const color = pct >= 80 ? "#16a34a" : pct >= 60 ? "#ca8a04" : "#dc2626";
+  const bg = pct >= 80 ? "#f0fdf4" : pct >= 60 ? "#fefce8" : "#fef2f2";
+  const border = pct >= 80 ? "#bbf7d0" : pct >= 60 ? "#fde68a" : "#fecaca";
+  return (
+    <span
+      style={{
+        flexShrink: 0,
+        padding: "2px 7px",
+        borderRadius: 999,
+        background: bg,
+        border: `1px solid ${border}`,
+        fontSize: 10,
+        fontWeight: 700,
+        color,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {pct}% match
+    </span>
   );
 }
 
@@ -195,51 +607,24 @@ export default function SourcePane({
 
 function buildHighlightedChunk(
   chunkText: string,
-  highlights: {
-    start: number;
-    end: number;
-  }[]
+  highlights: { start: number; end: number }[]
 ): string {
-
   if (!highlights.length) {
     return escapeHtml(chunkText);
   }
 
-  // sort
   const sorted = [...highlights]
-    .filter(
-      h =>
-        h.start >= 0 &&
-        h.end > h.start
-    )
-    .sort(
-      (a, b) => a.start - b.start
-    );
+    .filter((h) => h.start >= 0 && h.end > h.start)
+    .sort((a, b) => a.start - b.start);
 
-  // merge overlaps
-  const merged: {
-    start: number;
-    end: number;
-  }[] = [];
+  const merged: { start: number; end: number }[] = [];
 
   for (const h of sorted) {
-
-    const last =
-      merged[merged.length - 1];
-
-    if (
-      last &&
-      h.start <= last.end
-    ) {
-      // overlap -> extend
-      last.end = Math.max(
-        last.end,
-        h.end
-      );
+    const last = merged[merged.length - 1];
+    if (last && h.start <= last.end) {
+      last.end = Math.max(last.end, h.end);
     } else {
-      merged.push({
-        ...h
-      });
+      merged.push({ ...h });
     }
   }
 
@@ -247,40 +632,21 @@ function buildHighlightedChunk(
   let current = 0;
 
   for (const h of merged) {
-
-    // normal text
-    result += escapeHtml(
-      chunkText.slice(
-        current,
-        h.start
-      )
-    );
-
-    // highlighted text
+    result += escapeHtml(chunkText.slice(current, h.start));
     result += `
       <mark style="
-        background:#fef08a;
+        background:#e0d9ff;
         border-radius:3px;
         padding:1px 2px;
         font-weight:500;
       ">
-        ${escapeHtml(
-          chunkText.slice(
-            h.start,
-            h.end
-          )
-        )}
+        ${escapeHtml(chunkText.slice(h.start, h.end))}
       </mark>
     `;
-
     current = h.end;
   }
 
-  // remaining text
-  result += escapeHtml(
-    chunkText.slice(current)
-  );
-
+  result += escapeHtml(chunkText.slice(current));
   return result;
 }
 
@@ -289,29 +655,4 @@ function escapeHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-// ── Score badge ───────────────────────────────────────────────────────────────
-
-function ScoreBadge({ score }: { score: number }) {
-  const pct    = Math.round(score * 100);
-  const color  = pct >= 80 ? "#16a34a" : pct >= 60 ? "#ca8a04" : "#dc2626";
-  const bg     = pct >= 80 ? "#f0fdf4" : pct >= 60 ? "#fefce8" : "#fef2f2";
-  const border = pct >= 80 ? "#bbf7d0" : pct >= 60 ? "#fde68a" : "#fecaca";
-  return (
-    <div
-      style={{
-        flexShrink: 0,
-        padding: "3px 8px",
-        borderRadius: 20,
-        background: bg,
-        border: `1px solid ${border}`,
-        fontSize: 11,
-        fontWeight: 700,
-        color,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {pct}% match
-    </div>
-  );
 }

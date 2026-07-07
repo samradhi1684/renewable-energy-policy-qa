@@ -10,6 +10,11 @@ class Source(BaseModel):
     document_id: str
     score: float
     chunk_text: str
+    evidence: str = ""
+    token_start: int = 0
+    token_end: int = 0
+    highlight_spans: list[dict] = []
+    used: bool = False
 
 
 class QueryResponse(BaseModel):

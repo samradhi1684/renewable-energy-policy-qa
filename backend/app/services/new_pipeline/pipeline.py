@@ -557,6 +557,49 @@ class Reranker:
 
 
 # ===========================================================================
+# Citation helpers (evidence numbering + highlight-span lookup)
+# ===========================================================================
+
+from rapidfuzz import fuzz  # OPTIMIZATION note: same lib already used elsewhere in the codebase
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Break a chunk's text into citable sentence-ish units (same heuristic
+    used by the legacy RAGPipeline, kept identical so behaviour is familiar)."""
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    sentences: List[str] = []
+    for part in parts:
+        sub = re.split(r'\n+|(?<=\w)\s*[-·•]\s*(?=[A-Z])', part)
+        sentences.extend(sub)
+    return [s.strip() for s in sentences if len(s.strip()) > 15]
+
+
+def _locate_span(chunk_text: str, sentence: str) -> Optional[Tuple[int, int]]:
+    """Find the (start, end) character offset of `sentence` inside
+    `chunk_text`. Tries an exact case-insensitive match first, then falls
+    back to a fuzzy sliding-window match for minor LLM paraphrasing/whitespace
+    differences."""
+    start = chunk_text.lower().find(sentence.lower())
+    if start != -1:
+        return start, start + len(sentence)
+
+    best_score = 0
+    best_start = -1
+    sent_len = len(sentence)
+    for i in range(len(chunk_text)):
+        window = chunk_text[i:i + sent_len + 30]
+        score = fuzz.partial_ratio(sentence.lower(), window.lower())
+        if score > best_score:
+            best_score = score
+            best_start = i
+
+    if best_score >= 75 and best_start != -1:
+        return best_start, best_start + sent_len
+
+    return None
+
+
+# ===========================================================================
 # Answer generator
 # ===========================================================================
 
@@ -594,79 +637,156 @@ class AnswerGenerator:
             result = "\n\n".join(blocks)
         return result
 
+    @staticmethod
+    def _build_numbered_evidence(
+        chunks: List[Dict[str, Any]]
+    ) -> Tuple[str, Dict[str, Dict[str, Any]]]:
+        """Split every chunk into sentences and number them [S0], [S1], ...
+        so the LLM can cite exactly which sentences it used.
+
+        Returns (numbered_context_str, evidence_map) where evidence_map maps
+        a sentence id -> {"sentence": str, "chunk_idx": index into `chunks`}.
+        """
+        evidence_map: Dict[str, Dict[str, Any]] = {}
+        lines: List[str] = []
+        sid_counter = 0
+
+        for chunk_idx, chunk in enumerate(chunks):
+            lines.append(f"[Source {chunk_idx}: {chunk['chunk_id']}]")
+            for sentence in _split_sentences(chunk["chunk_text"]):
+                sid = f"S{sid_counter}"
+                evidence_map[sid] = {
+                    "sentence": sentence,
+                    "chunk_idx": chunk_idx,
+                }
+                lines.append(f"  [{sid}] {sentence}")
+                sid_counter += 1
+
+        return "\n".join(lines), evidence_map
+
     def generate(
         self,
         query: str,
         top_chunks: List[Dict[str, Any]],
         question_type: str = "Descriptive",
         conditions: str = "N/A",
-    ) -> Tuple[str, str]:
+    ) -> Tuple[str, str, List[str], Dict[str, Dict[str, Any]]]:
+        """Returns (answer, prompt, citations, evidence_map).
+
+        `citations` is the list of sentence ids (e.g. ["S0", "S4"]) the model
+        says it actually used. `evidence_map` lets the caller trace each id
+        back to the chunk it came from, so highlight spans can be computed.
+        """
         with Timer("AnswerGenerator.generate() — TOTAL (incl. LLM call)"):
             is_yes_no = question_type.lower().startswith("yes")
-            context   = self._build_context(top_chunks)
 
-            if not context:
-                return ("No — No relevant information found." if is_yes_no
-                        else "No relevant information found."), ""
-
-            cond_block = (
-                f"\nConditions:\n{conditions}\n"
-                if is_yes_no and conditions and conditions != "N/A" else ""
+            prompt, evidence_map = self.build_prompt(
+                query,
+                top_chunks,
+                question_type,
+                conditions,
             )
 
-            if is_yes_no:
-                prompt = f"""Answer the yes/no question using ONLY the information below.
+            if not prompt:
+                fallback = (
+                    "No — No relevant information found."
+                    if is_yes_no
+                    else "No relevant information found."
+                )
 
-Question:
-{query}
-{cond_block}
---- Supporting Text ---
-{context}
-
-Respond ONLY as "Yes — <one-sentence reason>" or "No — <one-sentence reason>".
-If evidence is absent: No — No explicit supporting evidence found.
-
-Output:""".strip()
-            else:
-                prompt = f"""Answer using ONLY the context below.
-
-Question:
-{query}
-
---- Supporting Text ---
-{context}
-
-Direct, factual answer (1-5 sentences). Do not speculate or mention sources.
-
-Answer:""".strip()
-
+                return fallback, "", [], {}
             try:
                 max_tok = 300 if is_yes_no else 3000
                 with Timer("  AnswerGenerator — LLM call"):
-                    raw = llm(prompt, max_tokens=max_tok)
+                    raw = llm(prompt, max_tokens=max_tok, temperature=0.1)
 
-                if is_yes_no:
-                    m = re.match(
-                        r"^(Yes|No)\s*(?:—|–|--|-)?\s*(.+)$",
-                        raw, re.IGNORECASE | re.DOTALL,
-                    )
-                    answer = (
-                        f"{m.group(1).capitalize()} — {m.group(2).strip()}" if m
-                        else "No — No explicit supporting evidence found."
-                    )
-                else:
-                    answer = raw
+                answer, citations = self._parse_response(raw, is_yes_no)
 
-                logger.info(f"Answer: {answer[:120]}")
-                return answer, prompt
+                logger.info(f"Answer: {answer[:120]}  citations={citations}")
+                return answer, prompt, citations, evidence_map
 
             except Exception as e:
                 logger.error(f"Answer generation failed: {e}")
                 return (
                     "No — Error during generation" if is_yes_no
                     else "Unable to generate answer.",
-                    "",
+                    "", [], evidence_map,
                 )
+
+
+    def build_stream_prompt(
+        self,
+        query: str,
+        top_chunks: List[Dict[str, Any]],
+    ):
+        numbered_context, _ = self._build_numbered_evidence(top_chunks)
+
+        if not numbered_context:
+            return ""
+
+        return f"""
+    Answer the question using ONLY the evidence below.
+
+    Question:
+    {query}
+
+    Evidence:
+    {numbered_context}
+
+    Instructions:
+    - Answer only using the evidence.
+    - Write a clear factual answer.
+    - Do NOT output JSON.
+    - Do NOT output citations.
+    - Do NOT mention source ids such as S0 or S1.
+    - Return plain text only.
+
+    Answer:
+    """.strip()
+
+        
+
+
+    @staticmethod
+    def _parse_response(raw: str, is_yes_no: bool) -> Tuple[str, List[str]]:
+        """Robustly parse the {"answer": ..., "citations": [...]} JSON the
+        model was asked for, with graceful fallbacks if it didn't comply."""
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.replace("```json", "").replace("```", "").strip()
+
+        parsed: Any = None
+        try:
+            parsed = json.loads(cleaned)
+        except Exception:
+            # Model may have added prose around the JSON object — grab the
+            # outermost {...} block and retry.
+            m = re.search(r"\{.*\}", cleaned, re.DOTALL)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except Exception:
+                    parsed = None
+
+        if isinstance(parsed, dict):
+            answer = parsed.get("answer", cleaned)
+            citations = parsed.get("citations", []) or []
+            if not isinstance(citations, list):
+                citations = []
+            citations = [c for c in citations if isinstance(c, str)]
+        else:
+            # Model ignored the JSON instruction entirely — treat the raw
+            # text as the answer with no citations rather than failing.
+            answer = cleaned
+            citations = []
+
+        if is_yes_no:
+            m = re.match(r"^(Yes|No)\s*(?:—|–|--|-)?\s*(.+)$", str(answer),
+                         re.IGNORECASE | re.DOTALL)
+            answer = (f"{m.group(1).capitalize()} — {m.group(2).strip()}" if m
+                      else "No — No explicit supporting evidence found.")
+
+        return str(answer), citations
 
 
 # ===========================================================================
@@ -692,6 +812,7 @@ class Pipeline:
         query: str,
         question_type: str = "Descriptive",
         conditions: str = "N/A",
+        generate_answer: bool = True,
     ) -> Dict[str, Any]:
         logger.info(f"\n{'='*70}\nQUERY: {query}\n{'='*70}")
         print(f"\n{'='*70}\n[TIMING] PIPELINE RUN START — QUERY: {query}\n{'='*70}")
@@ -723,15 +844,34 @@ class Pipeline:
                 "prompt":           "",
                 "query_entities":   query_entities,
                 "top_chunks":       [],
+                "citations":        [],
+                "evidence_map":     {},
             }
 
         # 3. Rerank
         top_chunks = self.reranker.rerank(query, pool)
 
-        # 4. Generate answer
-        answer, prompt = self.generator.generate(
-            query, top_chunks, question_type, conditions
-        )
+        # 4. Generate answer (+ which evidence sentences it actually cited)
+        if generate_answer:
+
+            answer, prompt, citations, evidence_map = self.generator.generate(
+                query,
+                top_chunks,
+                question_type,
+                conditions,
+            )
+
+        
+        else:
+
+            prompt = self.generator.build_stream_prompt(
+                query,
+                top_chunks,
+            )
+
+            answer = None
+            citations = []
+            evidence_map = {}
 
         total = time.perf_counter() - pipeline_start
         print(f"[TIMING] PIPELINE RUN TOTAL: {total:.3f}s")
@@ -742,6 +882,8 @@ class Pipeline:
             "prompt":           prompt,
             "query_entities":   query_entities,
             "top_chunks":       top_chunks,
+            "citations":        citations,
+            "evidence_map":     evidence_map,
         }
 
 
@@ -761,9 +903,28 @@ class Pipeline:
         with Timer("Pipeline.answer() — TOTAL (incl. run + source formatting)"):
             result = self.run(query=question)
 
+            citations    = result.get("citations", [])
+            evidence_map = result.get("evidence_map", {})
+
+            # Group cited sentences by which chunk they came from.
+            cited_by_chunk_idx: Dict[int, List[str]] = {}
+            for cid in citations:
+                ev = evidence_map.get(cid)
+                if not ev:
+                    continue
+                cited_by_chunk_idx.setdefault(ev["chunk_idx"], []).append(ev["sentence"])
+
             sources = []
 
-            for chunk in result["top_chunks"]:
+            for chunk_idx, chunk in enumerate(result["top_chunks"]):
+                cited_sentences = cited_by_chunk_idx.get(chunk_idx, [])
+
+                spans = []
+                for sentence in cited_sentences:
+                    span = _locate_span(chunk["chunk_text"], sentence)
+                    if span:
+                        spans.append({"start": span[0], "end": span[1]})
+
                 sources.append(
                     {
                         "chunk_id": chunk["chunk_id"],
@@ -772,17 +933,133 @@ class Pipeline:
                         "score": chunk.get("rerank_score", 0),
                         "token_start": 0,
                         "token_end": 0,
-                        "evidence": "",
-                        "highlight_spans": [],
+                        "evidence": " ".join(cited_sentences),
+                        "highlight_spans": spans,
+                        # True only if the model actually cited a sentence
+                        # from this chunk AND we located it in the text.
+                        "used": bool(spans),
                     }
                 )
+
+            # Used sources first (in original rerank order), then the rest —
+            # the frontend shows "used" by default and hides the rest behind
+            # a "View N more sources" toggle instead of us discarding them.
+            sources.sort(key=lambda s: (not s["used"],), )
+
+            # Edge case: model returned no (locatable) citations at all —
+            # fall back to marking the single top-ranked chunk as "used" so
+            # the UI always has at least one highlighted source to show.
+            if sources and not any(s["used"] for s in sources):
+                sources[0]["used"] = True
 
             result_out = {
                 "answer": result["predicted_answer"],
                 "sources": sources,
+                "used_source_count": sum(1 for s in sources if s["used"]),
             }
         return result_out
         
+
+    def prepare_for_stream(
+        self,
+        question: str,
+    ):
+        """
+        Performs retrieval/reranking exactly like answer(),
+        but stops before generation.
+
+        Returns:
+            prompt,
+            sources,
+            fallback
+        """
+
+        result = self.run(
+            query=question,
+            generate_answer=False,
+        )
+
+        citations = result.get("citations", [])
+        evidence_map = result.get("evidence_map", {})
+
+        cited_by_chunk_idx = {}
+
+        for cid in citations:
+            ev = evidence_map.get(cid)
+            if not ev:
+                continue
+
+            cited_by_chunk_idx.setdefault(
+                ev["chunk_idx"],
+                [],
+            ).append(ev["sentence"])
+
+        sources = []
+
+        for chunk_idx, chunk in enumerate(result["top_chunks"]):
+
+            cited_sentences = cited_by_chunk_idx.get(
+                chunk_idx,
+                [],
+            )
+
+            spans = []
+
+            for sentence in cited_sentences:
+                span = _locate_span(
+                    chunk["chunk_text"],
+                    sentence,
+                )
+
+                if span:
+                    spans.append(
+                        {
+                            "start": span[0],
+                            "end": span[1],
+                        }
+                    )
+
+            sources.append(
+                {
+                    "chunk_id": chunk["chunk_id"],
+                    "document_id": chunk["chunk_id"].split("_chunk_")[0],
+                    "chunk_text": chunk["chunk_text"],
+                    "score": chunk.get("rerank_score", 0),
+                    "token_start": 0,
+                    "token_end": 0,
+                    "evidence": " ".join(cited_sentences),
+                    "highlight_spans": spans,
+                    "used": bool(spans),
+                }
+            )
+
+        sources.sort(
+            key=lambda s: (not s["used"],)
+        )
+
+        if sources and not any(s["used"] for s in sources):
+            sources[0]["used"] = True
+
+        if not result["prompt"]:
+            return None, sources, result["predicted_answer"]
+
+        return result["prompt"], sources, None
+
+
+
+    def stream_answer(
+        self,
+        prompt: str,
+    ):
+        """
+        Stream tokens from the LLM.
+        """
+        yield from llm_client.generate_stream(
+            prompt=prompt,
+            temperature=0.1,
+            max_tokens=3000,
+        )
+
 
     def generate_chat_title(self, question: str):
         with Timer("Pipeline.generate_chat_title()"):

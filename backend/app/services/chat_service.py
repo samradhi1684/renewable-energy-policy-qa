@@ -106,6 +106,29 @@ async def rename_chat(
 
     return chat
 
+
+async def pin_chat(
+    db: AsyncSession,
+    chat_id: str,
+    user_id: str,
+    pinned: bool,
+):
+    chat = await get_chat(
+        db,
+        chat_id,
+        user_id,
+    )
+
+    if not chat:
+        return None
+
+    chat.pinned = pinned
+
+    await db.commit()
+    await db.refresh(chat)
+
+    return chat
+
 from sqlalchemy import (
     select,
     func,

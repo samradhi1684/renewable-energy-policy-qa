@@ -21,3 +21,13 @@ class UserResponse(BaseModel):
     id: str
     email: str
     username: str
+
+
+class OnboardingRequest(BaseModel):
+    display_name: str
+    role: str
+    country: str | None = None
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str

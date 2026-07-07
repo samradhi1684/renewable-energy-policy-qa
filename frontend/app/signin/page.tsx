@@ -4,15 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthLayout from "../../components/authLayout";
 import FormField from "../../components/formField";
-import GoogleButton from "../../components/googleButton";
+import { useAuth } from "../../context/AuthContext";
+
+const API_URL = "http://127.0.0.1:8000";
 
 export default function SignInPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSignIn(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
@@ -20,12 +24,43 @@ export default function SignInPage() {
       return;
     }
 
-    // No auth backend exists yet — returning users skip onboarding and
-    // go straight to chat. Replace with a real signin call once an auth
-    // API is available.
-    window.localStorage.setItem("policylens_user_email", email.trim());
+    setError(null);
+    setSubmitting(true);
 
-    router.push("/chat");
+    try {
+      // /auth/login is an OAuth2PasswordRequestForm endpoint on the
+      // backend, so it expects form-urlencoded "username" (= email) and
+      // "password", not JSON.
+      const body = new URLSearchParams();
+      body.append("username", email.trim());
+      body.append("password", password);
+
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      });
+
+      if (!res.ok) {
+        setError(
+          res.status === 401
+            ? "Incorrect email or password."
+            : "Something went wrong signing you in."
+        );
+        return;
+      }
+
+      const data = await res.json();
+      const user = await login(data.access_token);
+
+      router.push(user.onboarding_completed ? "/chat" : "/onboarding");
+    } catch {
+      setError("Could not reach the server. Is the backend running?");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -69,6 +104,7 @@ export default function SignInPage() {
 
         <button
           type="submit"
+          disabled={submitting}
           style={{
             width: "100%",
             padding: "13px 16px",
@@ -78,23 +114,17 @@ export default function SignInPage() {
             color: "#ffffff",
             fontSize: "15px",
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting ? "default" : "pointer",
+            opacity: submitting ? 0.7 : 1,
             marginTop: "16px",
             transition: "background 0.15s",
           }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary-hover)")}
           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--primary)")}
         >
-          Sign In
+          {submitting ? "Signing In..." : "Sign In"}
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "20px 0" }}>
-          <div style={{ flex: 1, height: "1px", background: "var(--input-border)" }} />
-          <span style={{ fontSize: "12px", color: "var(--placeholder-text)" }}>or</span>
-          <div style={{ flex: 1, height: "1px", background: "var(--input-border)" }} />
-        </div>
-
-        <GoogleButton onClick={() => router.push("/chat")} />
 
         <p style={{ textAlign: "center", fontSize: "13px", color: "var(--placeholder-text)", marginTop: "20px" }}>
           Don&apos;t have an account?{" "}

@@ -8,7 +8,10 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/login",
+    auto_error=False,
+)
 
 
 async def get_db():
@@ -50,3 +53,32 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+async def get_optional_current_user(
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    if token is None:
+        return None
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+
+        user_id: str = payload.get("sub")
+
+        if user_id is None:
+            return None
+
+    except JWTError:
+        return None
+
+    result = await db.execute(
+        select(User).where(User.id == user_id)
+    )
+
+    return result.scalar_one_or_none()

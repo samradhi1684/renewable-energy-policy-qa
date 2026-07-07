@@ -1,14 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { searchChats,exportChat, type Chat } from "../lib/api";
-import { PanelLeft, Plus, MoreVertical, Pin, Pencil, Trash2 , Search, Download} from "lucide-react";
+import { searchChats, exportChat, type Chat } from "../lib/api";
+import {
+  PanelLeft,
+  Plus,
+  MoreVertical,
+  MoreHorizontal,
+  Pin,
+  Pencil,
+  Trash2,
+  Search,
+  Download,
+} from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
 
 const MODELS = [
-  { id: "dsire", label: "USA" },
-  { id: "mnre", label: "India" },
+  { id: "dsire", label: "United States", flag: "🇺🇸" },
+  { id: "mnre", label: "India", flag: "🇮🇳" },
 ];
 
 type Props = {
@@ -45,14 +55,16 @@ export default function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] =
-  useState<Chat[]>([]);
+  const [searchResults, setSearchResults] = useState<Chat[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedLabel = MODELS.find((m) => m.id === selectedModel)?.label ?? "USA";
+  const selectedModelObj =
+    MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -69,32 +81,28 @@ export default function Sidebar({
   }, [renamingId]);
 
   useEffect(() => {
-  const runSearch = async () => {
-    if (!searchTerm.trim()) {
-      setSearchResults(chats);
-      return;
-    }
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
-    try {
-      const results =
-        await searchChats(searchTerm);
+  useEffect(() => {
+    const runSearch = async () => {
+      if (!searchTerm.trim()) {
+        setSearchResults(chats);
+        return;
+      }
 
-      setSearchResults(results);
-    } catch (err) {
-      console.error(
-        "Search failed",
-        err
-      );
-    }
-  };
+      try {
+        const results = await searchChats(searchTerm);
+        setSearchResults(results);
+      } catch (err) {
+        console.error("Search failed", err);
+      }
+    };
 
-  const timer =
-    setTimeout(runSearch, 300);
+    const timer = setTimeout(runSearch, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, chats]);
 
-  return () =>
-    clearTimeout(timer);
-
-}, [searchTerm, chats]);
   function openMenu(e: React.MouseEvent, chatId: string) {
     e.stopPropagation();
     e.preventDefault();
@@ -112,96 +120,84 @@ export default function Sidebar({
     if (renameValue.trim()) onRenameChat(chatId, renameValue.trim());
     setRenamingId(null);
   }
-  async function handleExport(
-  chatId: string,
-  format:
-    | "txt"
-    | "md"
-    | "pdf"
-) {
-  try {
-    const blob =
-      await exportChat(
-        chatId,
-        format
-      );
 
-    const url =
-      URL.createObjectURL(
-        blob
-      );
-
-    const a =
-      document.createElement(
-        "a"
-      );
-
-    a.href = url;
-
-    a.download = `chat.${format}`;
-
-    document.body.appendChild(
-      a
-    );
-
-    a.click();
-
-    a.remove();
-
-    URL.revokeObjectURL(
-      url
-    );
-
-    setMenu(null);
-  } catch (err) {
-    console.error(err);
+  async function handleExport(chatId: string, format: "txt" | "md" | "pdf") {
+    try {
+      const blob = await exportChat(chatId, format);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `chat.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setMenu(null);
+    } catch (err) {
+      console.error(err);
+    }
   }
-}
+
   const filteredChats = searchTerm.trim() ? searchResults : chats;
+  const pinned = filteredChats.filter((c) => c.pinned);
+  const unpinned = filteredChats.filter((c) => !c.pinned);
 
-  const pinned =
-    filteredChats.filter(
-      (c) => c.pinned
-    );
-
-  const unpinned =
-    filteredChats.filter(
-      (c) => !c.pinned
-    );
+  const initial = (user?.username?.charAt(0) || "U").toUpperCase();
 
   return (
     <>
-      {/* ── Sidebar panel ── */}
       <aside
         style={{
-          width: isOpen ? "260px" : "0px",
-          minWidth: isOpen ? "260px" : "0px",
+          width: isOpen ? "268px" : "0px",
+          minWidth: isOpen ? "268px" : "0px",
           background: "var(--sidebar-bg)",
           borderRight: "1px solid var(--sidebar-border)",
           display: "flex",
           flexDirection: "column",
           height: "100%",
-          padding: isOpen ? "8px" : "0px",
+          padding: isOpen ? "10px" : "0px",
           overflow: "hidden",
           transition: "width 0.2s, min-width 0.2s, padding 0.2s",
         }}
       >
-        {/* Inner wrapper keeps content at fixed 260px so it doesn't squish */}
-        <div style={{ width: "260px", display: "flex", flexDirection: "column", height: "100%" }}>
-
- 
-          {/* Header: Sidebar toggle + Model selector in same line */}
+        <div
+          style={{
+            width: "248px",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+          }}
+        >
+          {/* Top row: avatar + collapse */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "4px 6px 10px 6px",
+              justifyContent: "space-between",
+              padding: "2px 4px 12px",
             }}
           >
-            {/* Sidebar Toggle */}
+            <div
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: "50%",
+                background: "#17172a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {initial}
+            </div>
+
             <button
               onClick={onToggle}
+              title="Collapse sidebar"
               style={{
                 padding: "6px",
                 borderRadius: "8px",
@@ -211,7 +207,6 @@ export default function Sidebar({
                 color: "var(--foreground)",
                 display: "flex",
                 alignItems: "center",
-                flexShrink: 0,
               }}
               onMouseEnter={(e) =>
                 ((e.currentTarget as HTMLButtonElement).style.background =
@@ -224,153 +219,158 @@ export default function Sidebar({
             >
               <PanelLeft size={18} />
             </button>
+          </div>
 
-            {/* Model Selector */}
-            <div style={{ position: "relative", flex: 1 }}>
-              <button
-                onClick={() => setModelOpen((v) => !v)}
+          {/* Model selector pill */}
+          <div style={{ position: "relative", marginBottom: "14px" }}>
+            <button
+              onClick={() => setModelOpen((v) => !v)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "9px 14px",
+                borderRadius: "999px",
+                border: "none",
+                background: "var(--primary)",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: 700,
+                color: "#fff",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 15 }}>{selectedModelObj.flag}</span>
+                <span>{selectedModelObj.label}</span>
+              </span>
+
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
                 style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 10px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "var(--foreground)",
+                  transform: modelOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.2s",
+                  opacity: 0.9,
+                  flexShrink: 0,
                 }}
               >
-                <span>{selectedLabel}</span>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
 
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  style={{
-                    transform: modelOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 0.2s",
-                    opacity: 0.5,
-                  }}
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
+            {modelOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  left: 0,
+                  right: 0,
+                  background: "#fff",
+                  border: "1px solid var(--sidebar-border)",
+                  borderRadius: "14px",
+                  boxShadow: "var(--shadow-md)",
+                  zIndex: 50,
+                  overflow: "hidden",
+                }}
+              >
+                {MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      onModelChange(m.id);
+                      setModelOpen(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "10px 14px",
+                      border: "none",
+                      background:
+                        selectedModel === m.id
+                          ? "var(--sidebar-active)"
+                          : "#fff",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      fontWeight: 600,
+                      color: "var(--foreground)",
+                    }}
+                  >
+                    <span>{m.flag}</span>
+                    <span>{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-              {modelOpen && (
-                <div
+          {/* Nav: Search / New chat / More */}
+          <div style={{ marginBottom: "10px" }}>
+            {searchOpen ? (
+              <div style={{ position: "relative", marginBottom: "6px" }}>
+                <Search
+                  size={14}
                   style={{
                     position: "absolute",
-                    top: "calc(100% + 4px)",
-                    left: 0,
-                    right: 0,
-                    background: "#fff",
-                    border: "1px solid var(--sidebar-border)",
-                    borderRadius: "10px",
-                    boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                    zIndex: 50,
-                    overflow: "hidden",
+                    left: "12px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--placeholder-text)",
                   }}
-                >
-                  {MODELS.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        onModelChange(m.id);
-                        setModelOpen(false);
-                      }}
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 14px",
-                        border: "none",
-                        background:
-                          selectedModel === m.id
-                            ? "var(--sidebar-hover)"
-                            : "#fff",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        color: "var(--foreground)",
-                      }}
-                    >
-                      <span>{m.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          {/* New Chat button */}
-          <button
-            onClick={onNewChat}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "8px 10px",
-              borderRadius: "8px",
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontSize: "14px",
-              color: "var(--foreground)",
-              marginBottom: "8px",
-            }}
-            onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLButtonElement).style.background = "var(--sidebar-hover)")
-            }
-            onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLButtonElement).style.background = "transparent")
-            }
-          >
-            <Plus size={16} />
-            <span>New chat</span>
-          </button>
-        <div
-          style={{
-            position: "relative",
-            marginBottom: "10px",
-          }}
-        >
-          <Search
-            size={14}
-            style={{
-              position: "absolute",
-              left: "10px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              opacity: 0.5,
-            }}
-          />
+                />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search chats"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onBlur={() => {
+                    if (!searchTerm.trim()) setSearchOpen(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "9px 12px 9px 34px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--primary-soft-border)",
+                    background: "var(--primary-soft)",
+                    fontSize: "13px",
+                    color: "var(--foreground)",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            ) : (
+              <NavItem
+                icon={<Search size={16} />}
+                label="Search Chats"
+                onClick={() => setSearchOpen(true)}
+              />
+            )}
 
-          <input
-            type="text"
-            placeholder="Search chats"
-            value={searchTerm}
-            onChange={(e) =>
-              setSearchTerm(e.target.value)
-            }
-            style={{
-              width: "100%",
-              padding: "8px 12px 8px 32px",
-              borderRadius: "8px",
-              border: "1px solid var(--sidebar-border)",
-              background: "transparent",
-              fontSize: "13px",
-              outline: "none",
-            }}
-          />
-        </div>
+            <NavItem
+              icon={<Plus size={16} />}
+              label="New Chat"
+              onClick={onNewChat}
+            />
+
+            <NavItem
+              icon={<MoreHorizontal size={16} />}
+              label="More"
+              onClick={() => {}}
+              muted
+            />
+          </div>
+
           {/* Chat list */}
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", paddingTop: 4 }}>
             {filteredChats.length === 0 ? (
               <p
                 style={{
@@ -379,27 +379,13 @@ export default function Sidebar({
                   padding: "4px 10px",
                 }}
               >
-                {searchTerm
-                ? "No matching chats"
-                : "No chats yet"}
+                {searchTerm ? "No matching chats" : "No chats yet"}
               </p>
             ) : (
               <>
-                {/* Pinned section */}
                 {pinned.length > 0 && (
                   <>
-                    <p
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        color: "var(--placeholder-text)",
-                        padding: "4px 10px 6px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      Pinned
-                    </p>
+                    <SectionLabel>Pinned</SectionLabel>
                     {pinned.map((chat) => (
                       <ChatRow
                         key={chat.id}
@@ -417,21 +403,9 @@ export default function Sidebar({
                   </>
                 )}
 
-                {/* Recent section */}
                 {unpinned.length > 0 && (
                   <>
-                    <p
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        color: "var(--placeholder-text)",
-                        padding: "4px 10px 6px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      Recent
-                    </p>
+                    <SectionLabel>Recents</SectionLabel>
                     {unpinned.map((chat) => (
                       <ChatRow
                         key={chat.id}
@@ -452,7 +426,7 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* User profile at bottom */}
+          {/* User profile */}
           <div
             style={{
               borderTop: "1px solid var(--sidebar-border)",
@@ -467,16 +441,18 @@ export default function Sidebar({
                 alignItems: "center",
                 gap: "10px",
                 padding: "8px 10px",
-                borderRadius: "8px",
+                borderRadius: "10px",
                 border: "none",
                 background: "transparent",
                 cursor: "pointer",
               }}
               onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLButtonElement).style.background = "var(--sidebar-hover)")
+                ((e.currentTarget as HTMLButtonElement).style.background =
+                  "var(--sidebar-hover)")
               }
               onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLButtonElement).style.background = "transparent")
+                ((e.currentTarget as HTMLButtonElement).style.background =
+                  "transparent")
               }
             >
               <div
@@ -484,7 +460,7 @@ export default function Sidebar({
                   width: "32px",
                   height: "32px",
                   borderRadius: "50%",
-                  background: "#19c37d",
+                  background: "var(--primary)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -494,13 +470,14 @@ export default function Sidebar({
                   flexShrink: 0,
                 }}
               >
-                {user?.username?.charAt(0).toUpperCase() ?? "U"}
+                {initial}
               </div>
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
                   overflow: "hidden",
+                  alignItems: "flex-start",
                 }}
               >
                 <span
@@ -528,32 +505,30 @@ export default function Sidebar({
                   {user?.email}
                 </span>
               </div>
-</button>
+            </button>
 
-<button
-  onClick={() => {
-    logout();
-    window.location.href = "/login";
-  }}
-  style={{
-    width: "100%",
-    marginTop: "6px",
-    padding: "8px",
-    borderRadius: "8px",
-    border: "1px solid var(--sidebar-border)",
-    background: "transparent",
-    cursor: "pointer",
-    fontSize: "13px",
-    color: "#ef4444",
-  }}
->
-  Logout
-</button>
-
-</div>
-
-</div>
-</aside>
+            <button
+              onClick={() => {
+                logout();
+                window.location.href = "/signin";
+              }}
+              style={{
+                width: "100%",
+                marginTop: "6px",
+                padding: "8px",
+                borderRadius: "10px",
+                border: "1px solid var(--sidebar-border)",
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: "13px",
+                color: "#ef4444",
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </aside>
 
       {/* Expand button shown when sidebar is closed */}
       {!isOpen && (
@@ -570,12 +545,12 @@ export default function Sidebar({
             justifyContent: "center",
             width: "36px",
             height: "36px",
-            borderRadius: "8px",
+            borderRadius: "10px",
             border: "1px solid var(--sidebar-border)",
             background: "var(--sidebar-bg)",
             color: "var(--foreground)",
             cursor: "pointer",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+            boxShadow: "var(--shadow-sm)",
           }}
         >
           <PanelLeft size={18} />
@@ -591,13 +566,13 @@ export default function Sidebar({
             top: menu.y,
             left: menu.x,
             zIndex: 100,
-            minWidth: "180px",
-            borderRadius: "12px",
+            minWidth: "190px",
+            borderRadius: "14px",
             border: "1px solid var(--sidebar-border)",
             background: "#fff",
-            padding: "4px 0",
+            padding: "6px 0",
             fontSize: "14px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
+            boxShadow: "var(--shadow-md)",
           }}
         >
           {(() => {
@@ -607,7 +582,7 @@ export default function Sidebar({
               <>
                 <ContextMenuItem
                   icon={<Pin size={15} />}
-                  label={chat.pinned ? "Unpin" : "Pin"}
+                  label={chat.pinned ? "Unpin" : "Pin Chat"}
                   onClick={() => {
                     onPinChat(menu.chatId, !chat.pinned);
                     setMenu(null);
@@ -615,7 +590,7 @@ export default function Sidebar({
                 />
                 <ContextMenuItem
                   icon={<Pencil size={15} />}
-                  label="Rename"
+                  label="Rename Chat"
                   onClick={() => startRename(menu.chatId)}
                 />
                 <div
@@ -626,44 +601,17 @@ export default function Sidebar({
                 />
                 <ContextMenuItem
                   icon={<Trash2 size={15} />}
-                  label="Delete"
+                  label="Delete Chat"
                   onClick={() => {
                     onDeleteChat(menu.chatId);
                     setMenu(null);
                   }}
                   danger
                 />
-                <ContextMenuItem
-                  icon={<Download size={15} />}
-                  label="Export TXT"
-                  onClick={() =>
-                    handleExport(
-                      menu.chatId,
-                      "txt"
-                    )
-                  }
-                />
-
-                <ContextMenuItem
-                  icon={<Download size={15} />}
-                  label="Export Markdown"
-                  onClick={() =>
-                    handleExport(
-                      menu.chatId,
-                      "md"
-                    )
-                  }
-                />
-
-                <ContextMenuItem
-                  icon={<Download size={15} />}
-                  label="Export PDF"
-                  onClick={() =>
-                    handleExport(
-                      menu.chatId,
-                      "pdf"
-                    )
-                  }
+                <ExportMenuItem
+                  onExportTxt={() => handleExport(menu.chatId, "txt")}
+                  onExportMd={() => handleExport(menu.chatId, "md")}
+                  onExportPdf={() => handleExport(menu.chatId, "pdf")}
                 />
               </>
             );
@@ -671,6 +619,69 @@ export default function Sidebar({
         </div>
       )}
     </>
+  );
+}
+
+// ── NavItem ──────────────────────────────────────────────────────────────────
+
+function NavItem({
+  icon,
+  label,
+  onClick,
+  muted,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        padding: "9px 10px",
+        borderRadius: "10px",
+        border: "none",
+        background: "transparent",
+        cursor: "pointer",
+        fontSize: "14px",
+        fontWeight: 500,
+        color: muted ? "var(--placeholder-text)" : "var(--foreground)",
+        marginBottom: "2px",
+      }}
+      onMouseEnter={(e) =>
+        ((e.currentTarget as HTMLButtonElement).style.background =
+          "var(--sidebar-hover)")
+      }
+      onMouseLeave={(e) =>
+        ((e.currentTarget as HTMLButtonElement).style.background =
+          "transparent")
+      }
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      style={{
+        fontSize: "11px",
+        fontWeight: 700,
+        color: "var(--placeholder-text)",
+        padding: "10px 10px 6px",
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+      }}
+    >
+      {children}
+    </p>
   );
 }
 
@@ -708,7 +719,7 @@ function ChatRow({
       style={{
         display: "flex",
         alignItems: "center",
-        borderRadius: "8px",
+        borderRadius: "10px",
         marginBottom: "2px",
         background: isActive
           ? "var(--sidebar-active)"
@@ -743,7 +754,7 @@ function ChatRow({
             style={{
               width: "100%",
               borderRadius: "6px",
-              border: "1px solid var(--sidebar-border)",
+              border: "1px solid var(--primary-soft-border)",
               padding: "2px 6px",
               fontSize: "13px",
               outline: "none",
@@ -756,7 +767,8 @@ function ChatRow({
               alignItems: "center",
               gap: "6px",
               fontSize: "14px",
-              color: "var(--foreground)",
+              color: isActive ? "var(--primary)" : "var(--foreground)",
+              fontWeight: isActive ? 600 : 400,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -782,7 +794,7 @@ function ChatRow({
             justifyContent: "center",
             width: "26px",
             height: "26px",
-            borderRadius: "6px",
+            borderRadius: "8px",
             border: "none",
             background: "transparent",
             cursor: "pointer",
@@ -791,7 +803,7 @@ function ChatRow({
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLButtonElement).style.background =
-              "rgba(0,0,0,0.07)";
+              "rgba(109,95,240,0.12)";
             (e.currentTarget as HTMLButtonElement).style.opacity = "1";
           }}
           onMouseLeave={(e) => {
@@ -851,4 +863,80 @@ function ContextMenuItem({
   );
 }
 
+// ── ExportMenuItem (Export Chat with nested TXT/Markdown/PDF) ────────────────
 
+function ExportMenuItem({
+  onExportTxt,
+  onExportMd,
+  onExportPdf,
+}: {
+  onExportTxt: () => void;
+  onExportMd: () => void;
+  onExportPdf: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      style={{ position: "relative" }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "10px",
+          padding: "9px 14px",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          fontSize: "14px",
+          color: "var(--foreground)",
+          background: hovered || open ? "var(--sidebar-hover)" : "transparent",
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Download size={15} />
+          Export Chat
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          style={{ opacity: 0.6 }}
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: "calc(100% + 4px)",
+            minWidth: "150px",
+            borderRadius: "12px",
+            border: "1px solid var(--sidebar-border)",
+            background: "#fff",
+            padding: "6px 0",
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          <ContextMenuItem icon={null} label="TXT" onClick={onExportTxt} />
+          <ContextMenuItem icon={null} label="Markdown" onClick={onExportMd} />
+          <ContextMenuItem icon={null} label="PDF" onClick={onExportPdf} />
+        </div>
+      )}
+    </div>
+  );
+}

@@ -13,12 +13,16 @@ type User = {
   id: string;
   email: string;
   username: string;
+  display_name?: string | null;
+  role?: string | null;
+  country?: string | null;
+  onboarding_completed?: boolean;
 };
 
 type AuthContextType = {
   user: User | null;
   token: string | null;
-  login: (token: string) => Promise<void>;
+  login: (token: string) => Promise<User>;
   logout: () => void;
 };
 
@@ -38,7 +42,7 @@ export function AuthProvider({
 
   async function fetchUser(
     token: string
-  ) {
+  ): Promise<User> {
     const response = await fetch(
       `${API_URL}/auth/me`,
       {
@@ -51,6 +55,8 @@ export function AuthProvider({
     const data = await response.json();
 
     setUser(data);
+
+    return data;
   }
 
   useEffect(() => {
@@ -63,7 +69,7 @@ export function AuthProvider({
     }
   }, []);
 
-  async function login(token: string) {
+  async function login(token: string): Promise<User> {
     localStorage.setItem(
       "token",
       token
@@ -71,7 +77,7 @@ export function AuthProvider({
 
     setToken(token);
 
-    await fetchUser(token);
+    return await fetchUser(token);
   }
 
   function logout() {
